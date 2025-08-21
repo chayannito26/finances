@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .modal { transition: opacity 0.25s ease; }
+        .modal-active { overflow: hidden; }
+        .modal-content { transition: transform 0.25s ease; }
+        .table-container::-webkit-scrollbar { height: 8px; }
+        .table-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .table-container::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+        .table-container::-webkit-scrollbar-thumb:hover { background: #555; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Finance Dashboard</h1>
+            <p class="text-gray-600 mt-2">Your data is now saved automatically.</p>
+        </header>
+
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8 text-center">
+            <h2 class="text-lg font-semibold text-gray-500 mb-2">Cash at Hand</h2>
+            <p id="cash-at-hand" class="text-4xl font-bold text-indigo-600">৳0</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Income Section -->
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold">Income</h2>
+                    <button onclick="openModal('incomeModal', true)" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-transform transform hover:scale-105">
+                        <i class="fas fa-plus mr-2"></i> Add Income
+                    </button>
+                </div>
+                <div class="overflow-x-auto table-container">
+                    <table class="w-full text-left min-w-[600px]">
+                        <thead>
+                            <tr class="bg-gray-50 border-b">
+                                <th class="p-4 font-semibold">Source</th>
+                                <th class="p-4 font-semibold">Amount</th>
+                                <th class="p-4 font-semibold">Date</th>
+                                <th class="p-4 font-semibold">Clients</th>
+                                <th class="p-4 font-semibold text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="income-table"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Expenses Section -->
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold">Expenses</h2>
+                    <button onclick="openModal('expenseModal', true)" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-transform transform hover:scale-105">
+                        <i class="fas fa-plus mr-2"></i> Add Expense
+                    </button>
+                </div>
+                <div class="overflow-x-auto table-container">
+                    <table class="w-full text-left min-w-[600px]">
+                        <thead>
+                            <tr class="bg-gray-50 border-b">
+                                <th class="p-4 font-semibold">Purpose</th>
+                                <th class="p-4 font-semibold">Amount</th>
+                                <th class="p-4 font-semibold">Date</th>
+                                <th class="p-4 font-semibold">Receipts</th>
+                                <th class="p-4 font-semibold text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expense-table"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="incomeModal" class="modal-wrapper fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-content bg-white w-full max-w-md p-6 rounded-xl shadow-2xl transform scale-95">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-bold" id="income-modal-title">Add Income</h3>
+                <button onclick="closeModal('incomeModal')" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            </div>
+            <form id="income-form">
+                <input type="hidden" id="income-id">
+                <div class="mb-4"><label for="income-source" class="block text-sm font-medium text-gray-700 mb-1">Source</label><input type="text" id="income-source" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required></div>
+                <div class="mb-4"><label for="income-amount" class="block text-sm font-medium text-gray-700 mb-1">Amount</label><input type="number" step="any" id="income-amount" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required></div>
+                <div class="mb-4"><label for="income-date" class="block text-sm font-medium text-gray-700 mb-1">Date</label><input type="date" id="income-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required></div>
+                <div class="mb-4"><label for="income-type" class="block text-sm font-medium text-gray-700 mb-1">Type</label><input type="text" id="income-type" list="income-types-datalist" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required><datalist id="income-types-datalist"></datalist></div>
+                <div class="mb-4"><label for="income-clients" class="block text-sm font-medium text-gray-700 mb-1">Clients (comma separated)</label><input type="text" id="income-clients" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                <div class="mb-4"><label for="income-comments" class="block text-sm font-medium text-gray-700 mb-1">Comments</label><textarea id="income-comments" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea></div>
+                <div class="flex justify-end"><button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg">Save</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div id="expenseModal" class="modal-wrapper fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-content bg-white w-full max-w-md p-6 rounded-xl shadow-2xl transform scale-95">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-bold" id="expense-modal-title">Add Expense</h3>
+                <button onclick="closeModal('expenseModal')" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            </div>
+            <form id="expense-form">
+                <input type="hidden" id="expense-id">
+                <div class="mb-4"><label for="expense-purpose" class="block text-sm font-medium text-gray-700 mb-1">Purpose</label><input type="text" id="expense-purpose" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required></div>
+                <div class="mb-4"><label for="expense-amount" class="block text-sm font-medium text-gray-700 mb-1">Amount</label><input type="number" step="any" id="expense-amount" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required></div>
+                <div class="mb-4"><label for="expense-date" class="block text-sm font-medium text-gray-700 mb-1">Date</label><input type="date" id="expense-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required></div>
+                <div class="mb-4"><label for="expense-type" class="block text-sm font-medium text-gray-700 mb-1">Type</label><input type="text" id="expense-type" list="expense-types-datalist" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required><datalist id="expense-types-datalist"></datalist></div>
+                <div class="mb-4"><label for="expense-persons" class="block text-sm font-medium text-gray-700 mb-1">Persons (comma separated)</label><input type="text" id="expense-persons" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                <div class="mb-4"><label for="expense-comments" class="block text-sm font-medium text-gray-700 mb-1">Comments</label><textarea id="expense-comments" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea></div>
+                
+                <!-- Receipt Management Section -->
+                <div class="border-t pt-4 mt-4">
+                    <h4 class="text-lg font-semibold mb-2">Receipts</h4>
+                    <div id="receipts-list" class="mb-2 space-y-2"></div>
+                    <div class="flex items-center gap-2">
+                        <input type="file" id="receipt-file-input" class="hidden">
+                        <input type="text" id="receipt-filename-input" placeholder="Enter receipt name" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        <button type="button" onclick="document.getElementById('receipt-file-input').click()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold p-2 rounded-lg"><i class="fas fa-paperclip"></i></button>
+                    </div>
+                    <div id="upload-status" class="text-sm text-gray-500 mt-1"></div>
+                </div>
+
+                <div class="flex justify-end mt-4"><button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg">Save</button></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA MANAGEMENT ---
+        let revenues = [];
+        let expenses = [];
+        let tempReceipts = []; // To hold receipts before saving an expense
+
+        // --- INITIAL DATA LOADING ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadInitialData();
+            document.getElementById('receipt-file-input').addEventListener('change', handleReceiptUpload);
+        });
+
+        async function loadInitialData() {
+            try {
+                const response = await fetch('/api/data');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                revenues = data.revenues || [];
+                expenses = data.expenses || [];
+                render();
+            } catch (error) {
+                console.error('Failed to load data:', error);
+                alert('Could not connect to the server. Please ensure it is running and check the console for errors.');
+            }
+        }
+
+        // --- RENDERING LOGIC ---
+        function render() {
+            renderIncomeTable();
+            renderExpenseTable();
+            calculateCashAtHand();
+            updateTypeDatalists();
+        }
+
+        function formatCurrency(amount) {
+            const numAmount = parseFloat(amount);
+            const formattedAmount = Number.isInteger(numAmount) ? numAmount : numAmount.toFixed(2);
+            return `৳${formattedAmount}`;
+        }
+
+        function renderIncomeTable() {
+            const tableBody = document.getElementById('income-table');
+            tableBody.innerHTML = revenues.map(item => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="p-4">${item.source || ''}</td>
+                    <td class="p-4 text-green-600 font-medium">${formatCurrency(item.amount || 0)}</td>
+                    <td class="p-4">${item.date || ''}</td>
+                    <td class="p-4">${(item.clients || []).join(', ')}</td>
+                    <td class="p-4 text-right whitespace-nowrap">
+                        <button onclick="editIncome(${item.id})" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-edit"></i></button>
+                        <button onclick="deleteIncome(${item.id})" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>`).join('');
+        }
+
+        function renderExpenseTable() {
+            const tableBody = document.getElementById('expense-table');
+            tableBody.innerHTML = expenses.map(item => {
+                const receiptsHtml = (item.receipts && Array.isArray(item.receipts) && item.receipts.length > 0) 
+                    ? item.receipts.map(r => `<a href="${r.url}" target="_blank" class="text-blue-500 hover:underline">${r.description}</a>`).join('<br>')
+                    : 'None';
+                return `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="p-4">${item.purpose || ''}</td>
+                    <td class="p-4 text-red-600 font-medium">${formatCurrency(item.amount || 0)}</td>
+                    <td class="p-4">${item.date || ''}</td>
+                    <td class="p-4">${receiptsHtml}</td>
+                    <td class="p-4 text-right whitespace-nowrap">
+                        <button onclick="editExpense(${item.id})" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-edit"></i></button>
+                        <button onclick="deleteExpense(${item.id})" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>`}).join('');
+        }
+
+        function calculateCashAtHand() {
+            const totalIncome = revenues.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+            const totalExpenses = expenses.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+            document.getElementById('cash-at-hand').textContent = formatCurrency(totalIncome - totalExpenses);
+        }
+        
+        function updateTypeDatalists() {
+            const incomeTypes = [...new Set(revenues.map(i => i.type))];
+            const expenseTypes = [...new Set(expenses.map(e => e.type))];
+            document.getElementById('income-types-datalist').innerHTML = incomeTypes.map(type => `<option value="${type}"></option>`).join('');
+            document.getElementById('expense-types-datalist').innerHTML = expenseTypes.map(type => `<option value="${type}"></option>`).join('');
+        }
+
+        // --- MODAL HANDLING ---
+        function openModal(modalId, isNew = false) {
+            if (isNew) {
+                const today = new Date().toISOString().split('T')[0];
+                if (modalId === 'incomeModal') {
+                    document.getElementById('income-form').reset();
+                    document.getElementById('income-id').value = '';
+                    document.getElementById('income-modal-title').innerText = 'Add Income';
+                    document.getElementById('income-date').value = today;
+                } else {
+                    document.getElementById('expense-form').reset();
+                    document.getElementById('expense-id').value = '';
+                    document.getElementById('expense-modal-title').innerText = 'Add Expense';
+                    document.getElementById('expense-date').value = today;
+                    tempReceipts = [];
+                    renderTempReceipts();
+                }
+            }
+            document.getElementById(modalId).classList.remove('hidden');
+            document.body.classList.add('modal-active');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+            document.body.classList.remove('modal-active');
+        }
+        
+        // --- CRUD OPERATIONS via API ---
+        document.getElementById('income-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const id = document.getElementById('income-id').value;
+            const incomeData = {
+                id: id ? parseInt(id) : null,
+                source: document.getElementById('income-source').value,
+                amount: parseFloat(document.getElementById('income-amount').value),
+                date: document.getElementById('income-date').value,
+                type: document.getElementById('income-type').value,
+                clients: document.getElementById('income-clients').value.split(',').map(s => s.trim()).filter(Boolean),
+                comments: document.getElementById('income-comments').value
+            };
+
+            await fetch('/api/income', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(incomeData)
+            });
+            
+            closeModal('incomeModal');
+            loadInitialData(); // Reload all data from server
+        });
+
+        document.getElementById('expense-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const id = document.getElementById('expense-id').value;
+            const expenseData = {
+                id: id ? parseInt(id) : null,
+                purpose: document.getElementById('expense-purpose').value,
+                amount: parseFloat(document.getElementById('expense-amount').value),
+                date: document.getElementById('expense-date').value,
+                type: document.getElementById('expense-type').value,
+                persons: document.getElementById('expense-persons').value.split(',').map(s => s.trim()).filter(Boolean),
+                comments: document.getElementById('expense-comments').value,
+                receipts: tempReceipts
+            };
+
+            await fetch('/api/expenses', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(expenseData)
+            });
+            
+            closeModal('expenseModal');
+            loadInitialData();
+        });
+
+        function editIncome(id) {
+            const income = revenues.find(item => item.id === id);
+            if (income) {
+                document.getElementById('income-modal-title').innerText = 'Edit Income';
+                document.getElementById('income-id').value = income.id;
+                document.getElementById('income-source').value = income.source;
+                document.getElementById('income-amount').value = income.amount;
+                document.getElementById('income-date').value = income.date;
+                document.getElementById('income-type').value = income.type;
+                document.getElementById('income-clients').value = (income.clients || []).join(', ');
+                document.getElementById('income-comments').value = income.comments;
+                openModal('incomeModal');
+            }
+        }
+
+        async function deleteIncome(id) {
+            if (confirm('Are you sure you want to delete this income entry?')) {
+                await fetch(`/api/income/${id}`, { method: 'DELETE' });
+                loadInitialData();
+            }
+        }
+
+        function editExpense(id) {
+            const expense = expenses.find(item => item.id === id);
+            if (expense) {
+                document.getElementById('expense-modal-title').innerText = 'Edit Expense';
+                document.getElementById('expense-id').value = expense.id;
+                document.getElementById('expense-purpose').value = expense.purpose;
+                document.getElementById('expense-amount').value = expense.amount;
+                document.getElementById('expense-date').value = expense.date;
+                document.getElementById('expense-type').value = expense.type;
+                document.getElementById('expense-persons').value = (expense.persons || []).join(', ');
+                document.getElementById('expense-comments').value = expense.comments;
+                tempReceipts = (expense.receipts && Array.isArray(expense.receipts)) ? [...expense.receipts] : [];
+                renderTempReceipts();
+                openModal('expenseModal');
+            }
+        }
+
+        async function deleteExpense(id) {
+            if (confirm('Are you sure you want to delete this expense entry?')) {
+                await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+                loadInitialData();
+            }
+        }
+        
+        // --- RECEIPT MANAGEMENT ---
+        async function handleReceiptUpload() {
+            const fileInput = document.getElementById('receipt-file-input');
+            const filenameInput = document.getElementById('receipt-filename-input');
+            const statusDiv = document.getElementById('upload-status');
+
+            if (!fileInput.files.length) return;
+            if (!filenameInput.value) {
+                alert('Please enter a name for the receipt file.');
+                fileInput.value = ''; // Reset file input
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('receipt', file);
+            formData.append('filename', filenameInput.value);
+
+            statusDiv.innerText = 'Uploading...';
+            try {
+                const response = await fetch('/api/upload_receipt', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    tempReceipts.push(result);
+                    renderTempReceipts();
+                    statusDiv.innerText = 'Upload successful!';
+                    filenameInput.value = ''; // Clear for next upload
+                } else {
+                    throw new Error(result.error || 'Upload failed');
+                }
+            } catch (error) {
+                statusDiv.innerText = `Error: ${error.message}`;
+            } finally {
+                fileInput.value = ''; // Reset file input
+            }
+        }
+
+        function renderTempReceipts() {
+            const listDiv = document.getElementById('receipts-list');
+            listDiv.innerHTML = tempReceipts.map((receipt, index) => `
+                <div class="flex justify-between items-center bg-gray-100 p-2 rounded">
+                    <a href="${receipt.url}" target="_blank" class="text-blue-500 hover:underline">${receipt.description}</a>
+                    <button type="button" onclick="removeTempReceipt(${index})" class="text-red-500 hover:text-red-700 font-bold px-2">&times;</button>
+                </div>
+            `).join('');
+        }
+
+        function removeTempReceipt(index) {
+            // Note: This only removes it from the list in the browser. 
+            // The file is already on the server. A more advanced implementation
+            // would also send a request to the server to delete the file.
+            tempReceipts.splice(index, 1);
+            renderTempReceipts();
+        }
+    </script>
+</body>
+</html>
