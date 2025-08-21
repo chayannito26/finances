@@ -29,6 +29,24 @@
         <div class="bg-white rounded-xl shadow-lg p-6 mb-8 text-center">
             <h2 class="text-lg font-semibold text-gray-500 mb-2">Cash at Hand</h2>
             <p id="cash-at-hand" class="text-4xl font-bold text-indigo-600">৳0</p>
+            
+            <!-- Editable Cash Fields -->
+            <div class="mt-6 pt-4 border-t border-gray-200">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-md mx-auto">
+                    <div>
+                        <label for="cash-field" class="block text-sm font-medium text-gray-700 mb-1">Cash</label>
+                        <input type="number" step="any" id="cash-field" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-center" placeholder="0" value="0">
+                    </div>
+                    <div>
+                        <label for="bkash-field" class="block text-sm font-medium text-gray-700 mb-1">bKash</label>
+                        <input type="number" step="any" id="bkash-field" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-center" placeholder="0" value="0">
+                    </div>
+                    <div>
+                        <label for="bank-field" class="block text-sm font-medium text-gray-700 mb-1">Bank</label>
+                        <input type="number" step="any" id="bank-field" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-center" placeholder="0" value="0">
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -144,7 +162,32 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadInitialData();
             document.getElementById('receipt-file-input').addEventListener('change', handleReceiptUpload);
+            loadCashFields();
+            setupCashFieldListeners();
         });
+
+        // --- CASH FIELDS MANAGEMENT ---
+        function loadCashFields() {
+            // Load values from localStorage or default to 0
+            document.getElementById('cash-field').value = localStorage.getItem('finance_cash') || '0';
+            document.getElementById('bkash-field').value = localStorage.getItem('finance_bkash') || '0';
+            document.getElementById('bank-field').value = localStorage.getItem('finance_bank') || '0';
+        }
+
+        function setupCashFieldListeners() {
+            // Add event listeners to save values to localStorage when they change
+            document.getElementById('cash-field').addEventListener('input', function(e) {
+                localStorage.setItem('finance_cash', e.target.value || '0');
+            });
+            
+            document.getElementById('bkash-field').addEventListener('input', function(e) {
+                localStorage.setItem('finance_bkash', e.target.value || '0');
+            });
+            
+            document.getElementById('bank-field').addEventListener('input', function(e) {
+                localStorage.setItem('finance_bank', e.target.value || '0');
+            });
+        }
 
         async function loadInitialData() {
             try {
