@@ -10,11 +10,13 @@ import time
 # 'static_folder' is set to None because we will define a custom route for receipts.
 app = Flask(__name__, template_folder='.', static_folder=None)
 
-# Define the base directory for our data files.
+# Define the base directory for our data files (parent of current script’s folder).
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-INCOME_FILE = os.path.join(BASE_DIR, 'income', 'revenues.json')
-EXPENSES_FILE = os.path.join(BASE_DIR, 'expenses', 'expenses.json')
-RECEIPTS_DIR = os.path.join(BASE_DIR, 'expenses', 'receipts')
+PARENT_DIR = os.path.abspath(os.path.join(BASE_DIR, os.pardir))
+
+INCOME_FILE = os.path.join(PARENT_DIR, 'income', 'revenues.json')
+EXPENSES_FILE = os.path.join(PARENT_DIR, 'expenses', 'expenses.json')
+RECEIPTS_DIR = os.path.join(PARENT_DIR, 'expenses', 'receipts')
 
 # Ensure necessary directories and files exist on startup.
 os.makedirs(os.path.dirname(INCOME_FILE), exist_ok=True)
