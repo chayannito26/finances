@@ -53,7 +53,7 @@ def write_json_file(filepath, data):
 @app.route('/')
 def index():
     """Serves the main HTML page."""
-    return render_template('finance.html')
+    return render_template('index.html')
 
 @app.route('/receipts/<filename>')
 def get_receipt(filename):
