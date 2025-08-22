@@ -215,8 +215,26 @@
                 expenses = data.expenses || [];
                 render();
             } catch (error) {
-                console.error('Failed to load data:', error);
-                alert('Could not connect to the server. Please ensure it is running and check the console for errors.');
+                console.error('Failed to load data from server:', error);
+                alert('Could not connect to the server. Reading from fallback data.');
+
+                try {
+                    const [revenuesResponse, expensesResponse] = await Promise.all([
+                        fetch('https://raw.githubusercontent.com/chayannito26/income/refs/heads/main/revenues.json'),
+                        fetch('https://raw.githubusercontent.com/chayannito26/expenses/refs/heads/main/expenses.json')
+                    ]);
+
+                    if (!revenuesResponse.ok || !expensesResponse.ok) {
+                        throw new Error('Failed to load one or more fallback files.');
+                    }
+
+                    revenues = await revenuesResponse.json() || [];
+                    expenses = await expensesResponse.json() || [];
+                    render();
+                } catch (fallbackError) {
+                    console.error('Failed to load fallback data:', fallbackError);
+                    alert('Could not load fallback data either. Please check your internet connection and the console for errors.');
+                }
             }
         }
 
@@ -253,7 +271,7 @@
             const tableBody = document.getElementById('expense-table');
             tableBody.innerHTML = expenses.map(item => {
                 const receiptsHtml = (item.receipts && Array.isArray(item.receipts) && item.receipts.length > 0) 
-                    ? item.receipts.map(r => `<a href="${r.url}" target="_blank" class="text-blue-500 hover:underline">${r.description}</a>`).join('<br>')
+                    ? item.receipts.map(r => `<a href="${r.url.replace('./receipts/', '../expenses/receipts/')}" target="_blank" class="text-blue-500 hover:underline">${r.description}</a>`).join('<br>')
                     : 'None';
                 return `
                 <tr class="border-b hover:bg-gray-50">
