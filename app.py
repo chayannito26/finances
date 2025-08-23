@@ -66,6 +66,8 @@ def get_receipt(filename):
     """Serves uploaded receipt files from the 'expenses/receipts' directory."""
     # Prevent path traversal by normalizing and ensuring inside RECEIPTS_DIR
     safe_name = os.path.basename(filename)
+    # Strip any accidental query string fragments
+    safe_name = safe_name.split('?', 1)[0]
     return send_from_directory(RECEIPTS_DIR, safe_name)
 
 
@@ -230,6 +232,82 @@ def delete_receipt():
 
     # Idempotent delete
     return jsonify({'success': True, 'message': 'File not found; treated as deleted'}), 200
+
+@app.route('/api/update_receipt', methods=['POST'])
+def update_receipt():
+    """
+    Update/rename/replace a receipt file.
+
+    Form fields:
+      - old_filename: existing filename (or basename extracted from URL), may include ?v=... (will be stripped)
+      - new_base: new filename base (no extension)
+      - description: new description string
+      - receipt (optional): replacement file; if provided, will be saved (converted on client-side already if needed)
+    Behavior:
+      - If new_base + ext == old name, overwrite same file when a new file is uploaded.
+      - If different name and a new file is uploaded, save new file and delete old.
+      - If no new file, just rename (overwrite if target exists).
+    """
+    old_filename = (request.form.get('old_filename') or '').strip()
+    new_base = (request.form.get('new_base') or '').strip()
+    description = (request.form.get('description') or '').strip()
+
+    if not old_filename or not new_base or not description:
+        return jsonify({'error': 'old_filename, new_base and description are required'}), 400
+
+    # Sanitize and normalize names
+    old_filename = os.path.basename(old_filename).split('?', 1)[0]
+    safe_new_base = secure_filename(new_base)
+    if not safe_new_base:
+        return jsonify({'error': 'Invalid new_base'}), 400
+
+    old_path = os.path.join(RECEIPTS_DIR, old_filename)
+    if not os.path.abspath(old_path).startswith(os.path.abspath(RECEIPTS_DIR)):
+        return jsonify({'error': 'Invalid old_filename'}), 400
+
+    # Determine extension
+    file = request.files.get('receipt')
+    if file:
+        incoming_ext = os.path.splitext(file.filename)[1].lower()
+        if not _allowed_extension(file.filename):
+            return jsonify({'error': 'Unsupported file type'}), 400
+        new_ext = incoming_ext
+    else:
+        # Keep old extension
+        new_ext = os.path.splitext(old_filename)[1].lower()
+        if new_ext not in ALLOWED_EXTENSIONS:
+            return jsonify({'error': 'Unsupported file type'}), 400
+
+    new_filename = f"{safe_new_base}{new_ext}"
+    new_path = os.path.join(RECEIPTS_DIR, new_filename)
+    if not os.path.abspath(new_path).startswith(os.path.abspath(RECEIPTS_DIR)):
+        return jsonify({'error': 'Invalid target path'}), 400
+
+    try:
+        if file:
+            # Save/overwrite new file content
+            file.save(new_path)
+            # If renamed, remove old file (best effort)
+            if new_filename != old_filename and os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception:
+                    pass
+        else:
+            # No new file; just rename if different
+            if new_filename != old_filename:
+                if os.path.exists(old_path):
+                    # Overwrite if target exists
+                    os.replace(old_path, new_path)
+
+        url_path = f'./receipts/{new_filename}'
+        return jsonify({
+            'url': url_path,
+            'filename': new_filename,
+            'description': description
+        }), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to update receipt: {e}'}), 500
 
 
 # --- Main execution ---

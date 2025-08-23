@@ -31,10 +31,23 @@
         /* Lightbox */
         #image-lightbox { background: rgba(0,0,0,0.8); }
         #image-lightbox img { max-width: 90vw; max-height: 90vh; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
-        /* Preset buttons */
-        .preset-btn { @apply px-2 py-1 rounded border text-sm; }
-        .preset-active { @apply bg-indigo-600 text-white border-indigo-600; }
-        .preset-inactive { @apply bg-white text-gray-700 border-gray-300 hover:bg-gray-50; }
+        /* Preset buttons (plain CSS; @apply doesn't work via CDN) */
+        .preset-btn {
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            border: 1px solid #d1d5db; /* gray-300 */
+            font-size: 0.875rem; /* text-sm */
+            background: #fff;
+            color: #374151; /* gray-700 */
+            cursor: pointer;
+        }
+        .preset-btn:hover { background: #f9fafb; } /* gray-50 */
+        .preset-active {
+            background: #4f46e5; /* indigo-600 */
+            color: #fff;
+            border-color: #4f46e5;
+        }
+        .preset-inactive { background: #fff; color: #374151; border-color: #d1d5db; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -261,11 +274,75 @@
         </div>
     </div>
 
+    <!-- Receipt Edit Modal -->
+    <div id="receiptEditModal" class="modal-wrapper fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-content bg-white w-full max-w-md p-6 rounded-xl shadow-2xl transform scale-95">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-bold">Edit Receipt</h3>
+                <button onclick="closeReceiptEditModal()" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            </div>
+            <form id="edit-receipt-form" class="flex flex-col overflow-hidden">
+                <input type="hidden" id="edit-receipt-index">
+                <div class="modal-scroll space-y-3 pr-1">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">File name (no ext)</label>
+                        <input type="text" id="edit-receipt-filename-input" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g. invoice_123">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <input type="text" id="edit-receipt-description-input" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Description">
+                    </div>
+
+                    <div class="border-t pt-3">
+                        <h4 class="text-md font-semibold mb-2">Replace File (optional)</h4>
+                        <input type="file" id="edit-receipt-file-input" class="hidden" accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,image/*,application/pdf">
+                        <div class="flex items-center gap-2">
+                            <button type="button" id="edit-receipt-browse-btn" onclick="document.getElementById('edit-receipt-file-input').click()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold p-2 rounded-lg">
+                                <i class="fas fa-paperclip"></i>
+                            </button>
+                            <span id="edit-receipt-selected-name" class="text-sm text-gray-600 truncate"></span>
+                            <button type="button" id="edit-receipt-clear-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold px-3 py-2 rounded-lg hidden">Clear</button>
+                        </div>
+
+                        <div id="edit-compress-controls" class="mt-3 hidden">
+                            <div class="text-sm text-gray-700 font-medium mb-2">Image compression</div>
+                            <div class="flex flex-wrap items-center gap-2 mb-2">
+                                <span class="text-xs text-gray-500">Resolution:</span>
+                                <button type="button" class="preset-btn preset-inactive" data-percent="100">100%</button>
+                                <button type="button" class="preset-btn preset-inactive" data-percent="75">75%</button>
+                                <button type="button" class="preset-btn preset-inactive" data-percent="50">50%</button>
+                                <button type="button" class="preset-btn preset-inactive" data-percent="33">33%</button>
+                                <button type="button" class="preset-btn preset-inactive" data-percent="25">25%</button>
+                                <button type="button" class="preset-btn preset-inactive" data-percent="15">15%</button>
+                                <span id="edit-compress-res-label" class="ml-auto text-xs text-gray-600"></span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <label class="text-xs text-gray-500">JPEG quality</label>
+                                <input type="range" id="edit-compress-quality" min="40" max="100" step="1" value="80" class="w-40">
+                                <span id="edit-compress-quality-label" class="text-xs text-gray-600">80</span>
+                                <span id="edit-compress-size-label" class="ml-auto text-xs text-gray-600"></span>
+                            </div>
+                            <div id="edit-compress-note" class="text-xs text-gray-500 mt-1"></div>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-2">
+                            If you keep the same name, the file will be overwritten. Images are converted to JPEG when compression is enabled.
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-4 pt-3 border-t bg-white">
+                    <button type="button" onclick="closeReceiptEditModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancel</button>
+                    <button type="submit" id="edit-receipt-save-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         // --- DATA MANAGEMENT ---
         let revenues = [];
         let expenses = [];
         let tempReceipts = []; // To hold receipts before saving an expense
+        let isServerMode = false; // server vs GitHub fallback
 
         // Compression / upload state
         const ALLOWED_RECEIPT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf'];
@@ -346,6 +423,7 @@
                 const data = await response.json();
                 revenues = data.revenues || [];
                 expenses = data.expenses || [];
+                isServerMode = true;
                 render();
             } catch (error) {
                 console.error('Failed to load data from server:', error);
@@ -374,6 +452,7 @@
 
                     revenues = await revenuesResponse.json() || [];
                     expenses = await expensesResponse.json() || [];
+                    isServerMode = false;
                     render();
                 } catch (fallbackError) {
                     console.error('Failed to load fallback data:', fallbackError);
@@ -415,7 +494,17 @@
             const tableBody = document.getElementById('expense-table');
             tableBody.innerHTML = expenses.map(item => {
                 const receiptsHtml = (item.receipts && Array.isArray(item.receipts) && item.receipts.length > 0)
-                    ? item.receipts.map(r => `<a href="${r.url.replace('./receipts/', '../expenses/receipts/')}" target="_blank" class="text-blue-500 hover:underline">${r.description}</a>`).join('<br>')
+                    ? item.receipts.map(r => {
+                        let url = r.url || '';
+                        if (!url) return '';
+                        if (!isServerMode && /^\.\/receipts\//.test(url)) {
+                            // Map to GitHub raw; strip query to get actual filename
+                            const fname = stripQuery(url).split('/').pop();
+                            url = `https://raw.githubusercontent.com/chayannito26/expenses/refs/heads/main/receipts/${fname}`;
+                        }
+                        const desc = r.description || (r.filename || 'Receipt');
+                        return `<a href="${url}" target="_blank" class="text-blue-500 hover:underline">${desc}</a>`;
+                      }).join('<br>')
                     : 'None';
                 return `
                 <tr class="border-b hover:bg-gray-50">
@@ -825,21 +914,26 @@
             const listDiv = document.getElementById('receipts-list');
             listDiv.innerHTML = tempReceipts.map((receipt, index) => {
                 const displayName = receipt.description || 'Receipt';
-                const metaName = receipt.filename || (receipt.url ? receipt.url.split('/').pop() : '');
-                const isImage = receipt.url && /\.(png|jpe?g|webp|gif)$/i.test(receipt.url);
+                const metaName = receipt.filename || (receipt.url ? stripQuery(receipt.url).split('/').pop() : '');
+                const url = receipt.url || '';
+                const urlForCheck = stripQuery(url);
+                const isImage = urlForCheck && /\.(png|jpe?g|webp|gif)$/i.test(urlForCheck);
                 const thumbInner = isImage
-                    ? `<img src="${receipt.url}" alt="" class="w-12 h-12 object-cover rounded mr-3 cursor-zoom-in" onclick="openLightbox('${receipt.url}')">`
+                    ? `<img src="${url}" alt="" class="w-12 h-12 object-cover rounded mr-3 cursor-zoom-in" onclick="openLightbox('${url}')">`
                     : `<div class="w-12 h-12 flex items-center justify-center bg-gray-200 text-gray-600 rounded mr-3"><i class="far fa-file"></i></div>`;
                 return `
                 <div class="flex items-center justify-between bg-gray-100 p-2 rounded">
                     <div class="flex items-center min-w-0">
                         ${thumbInner}
                         <div class="min-w-0">
-                            <a href="${receipt.url}" target="_blank" class="text-blue-600 hover:underline break-words">${displayName}</a>
+                            <a href="${url}" target="_blank" class="text-blue-600 hover:underline break-words">${displayName}</a>
                             <div class="text-xs text-gray-500 truncate">${metaName}</div>
                         </div>
                     </div>
-                    <button type="button" onclick="removeTempReceipt(${index})" class="text-red-500 hover:text-red-700 font-bold px-2" title="Remove">&times;</button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="openReceiptEditModal(${index})" class="text-indigo-600 hover:text-indigo-900" title="Edit"><i class="fas fa-pen"></i></button>
+                        <button type="button" onclick="removeTempReceipt(${index})" class="text-red-500 hover:text-red-700 font-bold px-2" title="Remove">&times;</button>
+                    </div>
                 </div>`;
             }).join('');
         }
@@ -849,7 +943,7 @@
             if (!receipt) return;
 
             try {
-                const filename = receipt.filename || (receipt.url ? receipt.url.split('/').pop() : null);
+                const filename = receipt.filename || (receipt.url ? stripQuery(receipt.url).split('/').pop() : null);
                 if (filename) {
                     await fetch('/api/delete_receipt', {
                         method: 'POST',
@@ -888,6 +982,280 @@
             const el = document.getElementById(id);
             el.addEventListener('input', updateUploadButtonState);
         });
+
+        // --- Edit Receipt Modal Logic ---
+        let editState = {
+            index: null,
+            original: null,        // original receipt object
+            chosenFile: null,      // File chosen (or fetched) for compression/upload
+            compression: {
+                enabled: false,
+                original: { width: 0, height: 0, size: 0, type: '' },
+                percent: 100,
+                quality: 0.8,
+                blob: null,
+                blobSize: 0
+            }
+        };
+
+        function resetEditState() {
+            editState = {
+                index: null,
+                original: null,
+                chosenFile: null,
+                compression: {
+                    enabled: false,
+                    original: { width: 0, height: 0, size: 0, type: '' },
+                    percent: 100,
+                    quality: 0.8,
+                    blob: null,
+                    blobSize: 0
+                }
+            };
+            document.getElementById('edit-receipt-file-input').value = '';
+            document.getElementById('edit-receipt-selected-name').textContent = '';
+            document.getElementById('edit-receipt-clear-btn').classList.add('hidden');
+            document.getElementById('edit-compress-controls').classList.add('hidden');
+            document.getElementById('edit-compress-note').textContent = '';
+        }
+
+        async function openReceiptEditModal(index) {
+            const r = tempReceipts[index];
+            if (!r) return;
+            resetEditState();
+            editState.index = index;
+            editState.original = { ...r };
+
+            // Prefill fields
+            const oldFile = r.filename || (r.url ? stripQuery(r.url).split('/').pop() : '');
+            const base = oldFile.replace(/\.[^/.]+$/, '');
+            document.getElementById('edit-receipt-index').value = String(index);
+            document.getElementById('edit-receipt-filename-input').value = base;
+            document.getElementById('edit-receipt-description-input').value = r.description || '';
+
+            // Try to fetch existing file for compression if it's an image (not gif)
+            try {
+                const isImg = /\.(png|jpe?g|webp)$/i.test(oldFile);
+                if (isImg && r.url) {
+                    const resp = await fetch(r.url, { cache: 'no-store' });
+                    const blob = await resp.blob();
+                    const file = new File([blob], oldFile, { type: blob.type || 'image/jpeg' });
+                    prepareEditCompression(file);
+                    document.getElementById('edit-receipt-selected-name').textContent = oldFile + ' (current)';
+                    document.getElementById('edit-receipt-clear-btn').classList.remove('hidden');
+                }
+            } catch (_) {
+                // Non-fatal: user can still pick a replacement file
+            }
+
+            document.getElementById('receiptEditModal').classList.remove('hidden');
+            document.body.classList.add('modal-active');
+        }
+
+        function closeReceiptEditModal() {
+            document.getElementById('receiptEditModal').classList.add('hidden');
+            document.body.classList.remove('modal-active');
+            resetEditState();
+        }
+
+        function setupEditCompressionControls() {
+            const presetBtns = Array.from(document.querySelectorAll('#edit-compress-controls .preset-btn'));
+            const qInput = document.getElementById('edit-compress-quality');
+
+            presetBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    presetBtns.forEach(b => { b.classList.remove('preset-active'); b.classList.add('preset-inactive'); });
+                    btn.classList.add('preset-active'); btn.classList.remove('preset-inactive');
+                    editState.compression.percent = parseInt(btn.dataset.percent || '100', 10);
+                    updateEditCompressionLabels();
+                    if (editState.compression.enabled) computeEditCompressedBlob();
+                });
+            });
+
+            qInput.addEventListener('input', () => {
+                const q = Math.max(40, Math.min(100, parseInt(qInput.value, 10) || 80));
+                editState.compression.quality = q / 100;
+                document.getElementById('edit-compress-quality-label').textContent = String(q);
+                if (editState.compression.enabled) computeEditCompressedBlob();
+            });
+
+            // default 100%
+            const def = document.querySelector('#edit-compress-controls .preset-btn[data-percent="100"]');
+            if (def) { def.classList.add('preset-active'); def.classList.remove('preset-inactive'); }
+        }
+
+        function prepareEditCompression(file) {
+            editState.chosenFile = file;
+            const isGif = file.type === 'image/gif';
+            if (file.type.startsWith('image/') && !isGif) {
+                editState.compression.enabled = true;
+                editState.compression.original.size = file.size;
+                editState.compression.original.type = file.type;
+                loadImageMeta(file).then(({ width, height }) => {
+                    editState.compression.original.width = width;
+                    editState.compression.original.height = height;
+                    editState.compression.percent = 100;
+                    editState.compression.quality = 0.8;
+                    document.getElementById('edit-compress-quality').value = 80;
+                    document.getElementById('edit-compress-quality-label').textContent = '80';
+                    document.querySelectorAll('#edit-compress-controls .preset-btn').forEach(b => {
+                        b.classList.toggle('preset-active', b.dataset.percent === '100');
+                        b.classList.toggle('preset-inactive', b.dataset.percent !== '100');
+                    });
+                    document.getElementById('edit-compress-controls').classList.remove('hidden');
+                    document.getElementById('edit-compress-note').textContent = 'Images are converted to JPEG. Transparent areas become white.';
+                    updateEditCompressionLabels();
+                    computeEditCompressedBlob();
+                }).catch(() => {
+                    editState.compression.enabled = false;
+                    document.getElementById('edit-compress-controls').classList.add('hidden');
+                });
+            } else {
+                document.getElementById('edit-compress-controls').classList.add('hidden');
+                document.getElementById('edit-compress-note').textContent = isGif ? 'Animated GIFs are kept as-is (no compression).' : '';
+                editState.compression.enabled = false;
+                editState.compression.blob = null;
+                editState.compression.blobSize = 0;
+            }
+        }
+
+        function updateEditCompressionLabels() {
+            const o = editState.compression.original;
+            const w = Math.max(1, Math.round(o.width * (editState.compression.percent / 100)));
+            const h = Math.max(1, Math.round(o.height * (editState.compression.percent / 100)));
+            document.getElementById('edit-compress-res-label').textContent = `${o.width}×${o.height} → ${w}×${h}`;
+            document.getElementById('edit-compress-size-label').textContent = `Original ${formatBytes(o.size)} • Estimating...`;
+        }
+
+        function computeEditCompressedBlob() {
+            if (!editState.compression.enabled || !editState.chosenFile) return;
+            const o = editState.compression.original;
+            const targetW = Math.max(1, Math.round(o.width * (editState.compression.percent / 100)));
+            const targetH = Math.max(1, Math.round(o.height * (editState.compression.percent / 100)));
+
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = targetW; canvas.height = targetH;
+                    const ctx = canvas.getContext('2d', { alpha: false });
+                    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, targetW, targetH);
+                    ctx.drawImage(img, 0, 0, targetW, targetH);
+                    canvas.toBlob(blob => {
+                        if (blob) {
+                            editState.compression.blob = blob;
+                            editState.compression.blobSize = blob.size;
+                            document.getElementById('edit-compress-size-label').textContent =
+                                `Original ${formatBytes(o.size)} • Compressed ${formatBytes(blob.size)}`;
+                        }
+                    }, 'image/jpeg', editState.compression.quality);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(editState.chosenFile);
+        }
+
+        // File input for edit modal
+        document.getElementById('edit-receipt-file-input').addEventListener('change', (e) => {
+            const f = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+            const nameSpan = document.getElementById('edit-receipt-selected-name');
+            if (!f) { nameSpan.textContent = ''; document.getElementById('edit-receipt-clear-btn').classList.add('hidden'); return; }
+            if (!ALLOWED_RECEIPT_TYPES.includes(f.type)) {
+                alert('Unsupported file type. Please select an image or PDF.');
+                e.target.value = '';
+                return;
+            }
+            if (f.size > MAX_RECEIPT_SIZE_BYTES) {
+                alert('File too large. Max 10 MB.');
+                e.target.value = '';
+                return;
+            }
+            nameSpan.textContent = f.name;
+            document.getElementById('edit-receipt-clear-btn').classList.remove('hidden');
+            prepareEditCompression(f);
+        });
+
+        document.getElementById('edit-receipt-clear-btn').addEventListener('click', () => {
+            document.getElementById('edit-receipt-file-input').value = '';
+            document.getElementById('edit-receipt-selected-name').textContent = '';
+            // Restore to state of fetched original (if available) with compression
+            if (editState.original) {
+                const oldFile = editState.original.filename || (editState.original.url ? stripQuery(editState.original.url).split('/').pop() : '');
+                const isImg = /\.(png|jpe?g|webp)$/i.test(oldFile);
+                if (isImg && editState.original.url) {
+                    // keep current compression state from fetched file; nothing to change
+                } else {
+                    // clear compression for non-images
+                    editState.chosenFile = null;
+                    editState.compression.enabled = false;
+                    document.getElementById('edit-compress-controls').classList.add('hidden');
+                    document.getElementById('edit-compress-note').textContent = '';
+                }
+            }
+            document.getElementById('edit-receipt-clear-btn').classList.add('hidden');
+        });
+
+        // Save changes for edit modal
+        document.getElementById('edit-receipt-form').addEventListener('submit', handleReceiptUpdate);
+
+        async function handleReceiptUpdate(e) {
+            e.preventDefault();
+            const idx = parseInt(document.getElementById('edit-receipt-index').value, 10);
+            const r = tempReceipts[idx];
+            if (!r) return;
+
+            const oldFilename = r.filename || (r.url ? stripQuery(r.url).split('/').pop() : '');
+            const newBaseRaw = (document.getElementById('edit-receipt-filename-input').value || '').trim();
+            const description = (document.getElementById('edit-receipt-description-input').value || '').trim();
+
+            if (!newBaseRaw) { alert('Please enter a file name (without extension).'); return; }
+            if (!description) { alert('Please enter a description.'); return; }
+
+            const safeBase = newBaseRaw.replace(/[^\w\-]+/g, '_');
+
+            const formData = new FormData();
+            formData.append('old_filename', oldFilename);
+            formData.append('new_base', safeBase);
+            formData.append('description', description);
+
+            // Decide which file to send (if any)
+            let fileToSend = null;
+            if (editState.compression.enabled && editState.compression.blob) {
+                // compressed JPEG
+                const jpgName = `${safeBase}.jpg`;
+                fileToSend = new File([editState.compression.blob], jpgName, { type: 'image/jpeg' });
+            } else if (document.getElementById('edit-receipt-file-input').files.length > 0) {
+                fileToSend = document.getElementById('edit-receipt-file-input').files[0];
+            }
+            if (fileToSend) formData.append('receipt', fileToSend);
+
+            try {
+                const resp = await fetch('/api/update_receipt', { method: 'POST', body: formData });
+                const result = await resp.json();
+                if (!resp.ok) throw new Error(result.error || 'Update failed');
+
+                // update local state + cache-bust url to avoid stale cache
+                const vUrl = `${result.url}?v=${Date.now()}`;
+                tempReceipts[idx] = {
+                    url: vUrl,
+                    filename: result.filename,
+                    description: result.description
+                };
+                renderTempReceipts();
+                closeReceiptEditModal();
+            } catch (err) {
+                alert(`Failed to update receipt: ${err.message}`);
+            }
+        }
+
+        // Initialize edit compression controls
+        setupEditCompressionControls();
+
+        // Utility to strip query strings when checking extensions or deriving names
+        function stripQuery(s) {
+            return (s || '').split('?')[0];
+        }
 
         // --- INITIAL DATA LOADING, RENDERING, CRUD, etc. ---
         // ...existing code...
