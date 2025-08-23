@@ -9,6 +9,7 @@ import time
 # 'templates' is where Flask will look for index.html.
 # 'static_folder' is set to None because we will define a custom route for receipts.
 app = Flask(__name__, template_folder='.', static_folder=None)
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 
 # Define the base directory for our data files (parent of current script’s folder).
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -29,6 +30,11 @@ if not os.path.exists(INCOME_FILE):
 if not os.path.exists(EXPENSES_FILE):
     with open(EXPENSES_FILE, 'w') as f:
         json.dump([], f)
+
+ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf'}
+
+def _allowed_extension(filename):
+    return os.path.splitext(filename.lower())[1] in ALLOWED_EXTENSIONS
 
 # --- Helper Functions for File I/O ---
 # These functions handle reading from and writing to the JSON files safely.
@@ -55,10 +61,12 @@ def index():
     """Serves the main HTML page."""
     return render_template('index.html')
 
-@app.route('/receipts/<filename>')
+@app.route('/receipts/<path:filename>')
 def get_receipt(filename):
     """Serves uploaded receipt files from the 'expenses/receipts' directory."""
-    return send_from_directory(RECEIPTS_DIR, filename)
+    # Prevent path traversal by normalizing and ensuring inside RECEIPTS_DIR
+    safe_name = os.path.basename(filename)
+    return send_from_directory(RECEIPTS_DIR, safe_name)
 
 
 # --- API Endpoints for Data Management ---
@@ -153,27 +161,75 @@ def upload_receipt():
         return jsonify({'error': 'No file part'}), 400
 
     file = request.files['receipt']
-    new_filename = request.form.get('filename')
+    base_name = (request.form.get('filename') or '').strip()
+    description = (request.form.get('description') or '').strip()
 
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
-    if file and new_filename:
-        # Sanitize the filename to prevent security issues
-        filename = secure_filename(new_filename)
-        # Add extension from original file
-        extension = os.path.splitext(file.filename)[1]
-        final_filename = f"{filename}{extension}"
-        
-        save_path = os.path.join(RECEIPTS_DIR, final_filename)
-        file.save(save_path)
-        
-        # The URL path the browser will use to access the file
-        url_path = f'./receipts/{final_filename}'
-        
-        return jsonify({'url': url_path, 'description': filename}), 200
+    if not base_name:
+        return jsonify({'error': 'Filename is required'}), 400
 
-    return jsonify({'error': 'File or filename missing'}), 400
+    if not description:
+        return jsonify({'error': 'Description is required'}), 400
+
+    # Sanitize filename for storage (no extension here; we add it)
+    safe_base = secure_filename(base_name)
+    if not safe_base:
+        return jsonify({'error': 'Invalid filename'}), 400
+
+    # Validate extension/type
+    original_ext = os.path.splitext(file.filename)[1].lower()
+    if original_ext == '' or not _allowed_extension(file.filename):
+        return jsonify({'error': 'Unsupported file type'}), 400
+
+    # Ensure unique final filename to avoid overwriting: <safe_base>-<ts><ext>
+    ts = int(time.time() * 1000)
+    final_filename = f"{safe_base}-{ts}{original_ext}"
+    save_path = os.path.join(RECEIPTS_DIR, final_filename)
+
+    try:
+        file.save(save_path)
+    except Exception as e:
+        return jsonify({'error': f'Failed to save file: {e}'}), 500
+
+    # URL used by the frontend (relative so it works behind proxies too)
+    url_path = f'./receipts/{final_filename}'
+    return jsonify({
+        'url': url_path,
+        'filename': final_filename,
+        'description': description
+    }), 200
+
+@app.route('/api/delete_receipt', methods=['POST'])
+def delete_receipt():
+    """Deletes a previously uploaded receipt file. Body: { filename } or { url }."""
+    data = request.get_json(silent=True) or {}
+    filename = data.get('filename')
+    url = data.get('url')
+
+    if not filename and url:
+        filename = os.path.basename(url)
+
+    if not filename:
+        return jsonify({'error': 'filename or url is required'}), 400
+
+    safe_name = os.path.basename(filename)
+    target_path = os.path.join(RECEIPTS_DIR, safe_name)
+
+    # Ensure target is within receipts dir
+    if not os.path.abspath(target_path).startswith(os.path.abspath(RECEIPTS_DIR)):
+        return jsonify({'error': 'Invalid filename'}), 400
+
+    if os.path.exists(target_path):
+        try:
+            os.remove(target_path)
+            return jsonify({'success': True}), 200
+        except Exception as e:
+            return jsonify({'error': f'Failed to delete: {e}'}), 500
+
+    # Idempotent delete
+    return jsonify({'success': True, 'message': 'File not found; treated as deleted'}), 200
 
 
 # --- Main execution ---

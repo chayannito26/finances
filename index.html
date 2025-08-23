@@ -154,10 +154,52 @@
                 <div class="border-t pt-4 mt-4">
                     <h4 class="text-lg font-semibold mb-2">Receipts</h4>
                     <div id="receipts-list" class="mb-2 space-y-2"></div>
-                    <div class="flex items-center gap-2">
-                        <input type="file" id="receipt-file-input" class="hidden">
-                        <input type="text" id="receipt-filename-input" placeholder="Enter receipt name" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                        <button type="button" onclick="document.getElementById('receipt-file-input').click()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold p-2 rounded-lg"><i class="fas fa-paperclip"></i></button>
+
+                    <!-- Inputs: file + filename + description -->
+                    <input type="file" id="receipt-file-input" class="hidden" accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,image/*,application/pdf">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div class="sm:col-span-1">
+                            <input
+                                type="text"
+                                id="receipt-filename-input"
+                                placeholder="File name (no ext)"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                aria-label="Receipt file name"
+                            >
+                        </div>
+                        <div class="sm:col-span-2">
+                            <input
+                                type="text"
+                                id="receipt-description-input"
+                                placeholder="Description"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                aria-label="Receipt description"
+                            >
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 mt-2">
+                        <button
+                            type="button"
+                            id="receipt-browse-btn"
+                            onclick="document.getElementById('receipt-file-input').click()"
+                            class="bg-blue-500 hover:bg-blue-600 text-white font-bold p-2 rounded-lg disabled:opacity-50"
+                            title="Choose a file"
+                        >
+                            <i class="fas fa-paperclip"></i>
+                        </button>
+                        <span id="receipt-selected-name" class="text-sm text-gray-600 truncate"></span>
+                        <button
+                            type="button"
+                            id="receipt-upload-btn"
+                            class="bg-green-600 hover:bg-green-700 text-white font-bold px-3 py-2 rounded-lg disabled:opacity-50"
+                            title="Upload receipt"
+                        >
+                            Upload
+                        </button>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">
+                        Images or PDF only. Both filename and description are required.
+                        PDFs are auto-converted to JPG for preview/use; the original PDF is saved as backup.
                     </div>
                     <div id="upload-status" class="text-sm text-gray-500 mt-1"></div>
                 </div>
@@ -176,7 +218,8 @@
         // --- INITIAL DATA LOADING ---
         document.addEventListener('DOMContentLoaded', () => {
             loadInitialData();
-            document.getElementById('receipt-file-input').addEventListener('change', handleReceiptUpload);
+            document.getElementById('receipt-file-input').addEventListener('change', onReceiptFileChosen);
+            document.getElementById('receipt-upload-btn').addEventListener('click', handleReceiptUpload);
             loadCashFields();
             setupCashFieldListeners();
         });
@@ -432,24 +475,88 @@
         }
         
         // --- RECEIPT MANAGEMENT ---
-        async function handleReceiptUpload() {
-            const fileInput = document.getElementById('receipt-file-input');
-            const filenameInput = document.getElementById('receipt-filename-input');
-            const statusDiv = document.getElementById('upload-status');
+        const ALLOWED_RECEIPT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf'];
+        const MAX_RECEIPT_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+        let currentChosenFile = null;
 
-            if (!fileInput.files.length) return;
-            if (!filenameInput.value) {
-                alert('Please enter a name for the receipt file.');
-                fileInput.value = ''; // Reset file input
+        function titleCase(str) {
+            return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        }
+
+        function onReceiptFileChosen(e) {
+            const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+            const nameSpan = document.getElementById('receipt-selected-name');
+            const filenameInput = document.getElementById('receipt-filename-input');
+            const descriptionInput = document.getElementById('receipt-description-input');
+
+            currentChosenFile = null;
+            nameSpan.textContent = '';
+
+            if (!file) return;
+
+            if (!ALLOWED_RECEIPT_TYPES.includes(file.type)) {
+                alert('Unsupported file type. Please select an image or PDF.');
+                e.target.value = '';
+                return;
+            }
+            if (file.size > MAX_RECEIPT_SIZE_BYTES) {
+                alert('File too large. Max 10 MB.');
+                e.target.value = '';
                 return;
             }
 
-            const file = fileInput.files[0];
+            currentChosenFile = file;
+            nameSpan.textContent = file.name;
+
+            // Autofill defaults from uploaded filename if empty
+            const base = file.name.replace(/\.[^/.]+$/, '');
+            const safeBase = base.replace(/[^\w\-]+/g, '_');
+            if (!filenameInput.value.trim()) filenameInput.value = safeBase;
+            if (!descriptionInput.value.trim()) {
+                const human = titleCase(base.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim());
+                descriptionInput.value = human || safeBase;
+            }
+        }
+
+        async function handleReceiptUpload() {
+            const fileInput = document.getElementById('receipt-file-input');
+            const filenameInput = document.getElementById('receipt-filename-input');
+            const descriptionInput = document.getElementById('receipt-description-input');
+            const statusDiv = document.getElementById('upload-status');
+            const uploadBtn = document.getElementById('receipt-upload-btn');
+            const browseBtn = document.getElementById('receipt-browse-btn');
+
+            statusDiv.textContent = '';
+
+            const file = currentChosenFile || (fileInput.files && fileInput.files[0]);
+            const filenameRaw = (filenameInput.value || '').trim();
+            const description = (descriptionInput.value || '').trim();
+
+            if (!file) {
+                alert('Please choose a file to upload.');
+                return;
+            }
+            if (!filenameRaw) {
+                alert('Please enter a file name (without extension).');
+                return;
+            }
+            if (!description) {
+                alert('Please enter a description.');
+                return;
+            }
+
+            // Prevent characters that could be problematic in filenames
+            const safeName = filenameRaw.replace(/[^\w\-]+/g, '_');
+
             const formData = new FormData();
             formData.append('receipt', file);
-            formData.append('filename', filenameInput.value);
+            formData.append('filename', safeName);
+            formData.append('description', description);
 
-            statusDiv.innerText = 'Uploading...';
+            uploadBtn.disabled = true;
+            browseBtn.disabled = true;
+            statusDiv.textContent = 'Uploading...';
+
             try {
                 const response = await fetch('/api/upload_receipt', {
                     method: 'POST',
@@ -457,35 +564,73 @@
                 });
                 const result = await response.json();
 
-                if (response.ok) {
-                    tempReceipts.push(result);
-                    renderTempReceipts();
-                    statusDiv.innerText = 'Upload successful!';
-                    filenameInput.value = ''; // Clear for next upload
-                } else {
+                if (!response.ok) {
                     throw new Error(result.error || 'Upload failed');
                 }
+
+                // Expecting: { url, filename, description }
+                tempReceipts.push({
+                    url: result.url,
+                    filename: result.filename,
+                    description: result.description
+                });
+                renderTempReceipts();
+
+                statusDiv.textContent = 'Upload successful!';
+                // Reset inputs for next upload
+                fileInput.value = '';
+                currentChosenFile = null;
+                document.getElementById('receipt-selected-name').textContent = '';
+                filenameInput.value = '';
+                descriptionInput.value = '';
             } catch (error) {
-                statusDiv.innerText = `Error: ${error.message}`;
+                statusDiv.textContent = `Error: ${error.message}`;
             } finally {
-                fileInput.value = ''; // Reset file input
+                uploadBtn.disabled = false;
+                browseBtn.disabled = false;
             }
         }
 
         function renderTempReceipts() {
             const listDiv = document.getElementById('receipts-list');
-            listDiv.innerHTML = tempReceipts.map((receipt, index) => `
-                <div class="flex justify-between items-center bg-gray-100 p-2 rounded">
-                    <a href="${receipt.url}" target="_blank" class="text-blue-500 hover:underline">${receipt.description}</a>
-                    <button type="button" onclick="removeTempReceipt(${index})" class="text-red-500 hover:text-red-700 font-bold px-2">&times;</button>
-                </div>
-            `).join('');
+            listDiv.innerHTML = tempReceipts.map((receipt, index) => {
+                const displayName = receipt.description || 'Receipt';
+                const metaName = receipt.filename || (receipt.url ? receipt.url.split('/').pop() : '');
+                const isImage = receipt.url && /\.(png|jpe?g|webp|gif)$/i.test(receipt.url);
+                const thumb = isImage
+                    ? `<img src="${receipt.url}" alt="" class="w-12 h-12 object-cover rounded mr-3">`
+                    : `<div class="w-12 h-12 flex items-center justify-center bg-gray-200 text-gray-600 rounded mr-3"><i class="far fa-file"></i></div>`;
+                return `
+                <div class="flex items-center justify-between bg-gray-100 p-2 rounded">
+                    <div class="flex items-center min-w-0">
+                        ${thumb}
+                        <div class="min-w-0">
+                            <a href="${receipt.url}" target="_blank" class="text-blue-600 hover:underline break-words">${displayName}</a>
+                            <div class="text-xs text-gray-500 truncate">${metaName}</div>
+                        </div>
+                    </div>
+                    <button type="button" onclick="removeTempReceipt(${index})" class="text-red-500 hover:text-red-700 font-bold px-2" title="Remove">&times;</button>
+                </div>`;
+            }).join('');
         }
 
-        function removeTempReceipt(index) {
-            // Note: This only removes it from the list in the browser. 
-            // The file is already on the server. A more advanced implementation
-            // would also send a request to the server to delete the file.
+        async function removeTempReceipt(index) {
+            const receipt = tempReceipts[index];
+            if (!receipt) return;
+
+            try {
+                const filename = receipt.filename || (receipt.url ? receipt.url.split('/').pop() : null);
+                if (filename) {
+                    await fetch('/api/delete_receipt', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filename })
+                    });
+                }
+            } catch (_) {
+                // non-fatal
+            }
+
             tempReceipts.splice(index, 1);
             renderTempReceipts();
         }
