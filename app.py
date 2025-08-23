@@ -3,6 +3,10 @@ import json
 from flask import Flask, jsonify, request, send_from_directory, render_template, abort
 from werkzeug.utils import secure_filename
 import time
+# NEW: imports for push orchestration
+import subprocess
+import threading
+from datetime import datetime
 
 # --- Configuration ---
 # This sets up the Flask application.
@@ -33,8 +37,150 @@ if not os.path.exists(EXPENSES_FILE):
 
 ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf'}
 
-def _allowed_extension(filename):
-    return os.path.splitext(filename.lower())[1] in ALLOWED_EXTENSIONS
+# NEW: repo paths for pushing
+INCOME_REPO = os.path.join(PARENT_DIR, 'income')
+EXPENSES_REPO = os.path.join(PARENT_DIR, 'expenses')
+
+# NEW: serialize push operations
+_push_lock = threading.Lock()
+
+def _run_git(repo_path, args, timeout=180):
+    """Run a git command and return (rc, out, err)."""
+    try:
+        cp = subprocess.run(
+            ['git'] + list(args),
+            cwd=repo_path,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        return cp.returncode, cp.stdout, cp.stderr
+    except Exception as e:
+        return 1, '', f'Exception: {e}'
+
+def _ensure_git_identity(repo_path, log_acc):
+    """Ensure local git user.name/email exist to allow commits."""
+    rc_e, out_e, _ = _run_git(repo_path, ['config', '--get', 'user.email'])
+    rc_n, out_n, _ = _run_git(repo_path, ['config', '--get', 'user.name'])
+    if (rc_e != 0 or not out_e.strip()):
+        _run_git(repo_path, ['config', 'user.email', 'finance-bot@example.com'])
+        log_acc.append('Configured user.email')
+    if (rc_n != 0 or not out_n.strip()):
+        _run_git(repo_path, ['config', 'user.name', 'Finance Bot'])
+        log_acc.append('Configured user.name')
+
+def _repo_ok(repo_path):
+    return os.path.isdir(repo_path) and os.path.isdir(os.path.join(repo_path, '.git'))
+
+def _git_available():
+    try:
+        cp = subprocess.run(['git', '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        return cp.returncode == 0
+    except Exception:
+        return False
+
+def _has_local_changes(repo_path):
+    """
+    Fast local change detector. Returns (has_changes: bool, err: Optional[str]).
+    Counts tracked/untracked (non-ignored) changes; ignores files in .gitignore.
+    """
+    rc, out, err = _run_git(repo_path, ['status', '--porcelain'])
+    if rc != 0:
+        return False, (err.strip() or out.strip() or 'git status failed')
+    return bool(out.strip()), None
+
+def _commit_and_push(repo_path, repo_name):
+    """
+    For a git repo, only push when local changes exist:
+      - if no local changes: skip remote operations and return up-to-date
+      - else: add -A, commit, pull --rebase, push
+    Returns dict with status and logs.
+    """
+    result = {
+        'name': repo_name,
+        'changed': False,
+        'committed': False,
+        'pushed': False,
+        'log': '',
+        'error': None
+    }
+    logs = []
+    if not _repo_ok(repo_path):
+        result['error'] = f'Repository not found or not a git repo: {repo_path}'
+        return result
+
+    # Fast path: skip everything if nothing changed locally
+    has_changes, status_err = _has_local_changes(repo_path)
+    if status_err:
+        result['error'] = status_err
+        result['log'] = '\n'.join(logs)
+        return result
+    if not has_changes:
+        logs.append('No local changes. Skipping pull/push.')
+        result['log'] = '\n'.join(logs)
+        return result
+
+    result['changed'] = True
+
+    # Configure identity only when we will commit
+    _ensure_git_identity(repo_path, logs)
+
+    # Quick remote check (needed only when we intend to push)
+    rc, out, err = _run_git(repo_path, ['remote', 'get-url', 'origin'])
+    if rc != 0:
+        result['error'] = f'No remote "origin" configured.\n{err}'.strip()
+        result['log'] = '\n'.join(logs)
+        return result
+    logs.append(f'origin: {out.strip()}')
+
+    # Stage and commit
+    rc, out, err = _run_git(repo_path, ['add', '-A'])
+    logs.append(out + err)
+
+    rc, _, _ = _run_git(repo_path, ['diff', '--cached', '--quiet'])
+    staged_changes = (rc == 1)
+    if not staged_changes:
+        logs.append('No staged changes after add. Nothing to commit.')
+        result['log'] = '\n'.join(logs)
+        return result
+
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    message = f'Finance sync ({repo_name}) at {ts}'
+    rc, out, err = _run_git(repo_path, ['commit', '-m', message])
+    logs.append(out + err)
+    if rc != 0:
+        result['error'] = f'Commit failed.\n{out}\n{err}'.strip()
+        result['log'] = '\n'.join(logs)
+        return result
+    result['committed'] = True
+
+    # Rebase to remote (fetch is implicit in pull)
+    rc, out, err = _run_git(repo_path, ['pull', '--rebase'])
+    logs.append(out + err)
+    if rc != 0:
+        _run_git(repo_path, ['rebase', '--abort'])
+        result['error'] = f'Pull --rebase failed.\n{out}\n{err}'.strip()
+        result['log'] = '\n'.join(logs)
+        return result
+
+    # Push
+    rc, out, err = _run_git(repo_path, ['push'])
+    logs.append(out + err)
+    if rc != 0:
+        result['error'] = f'Push failed.\n{out}\n{err}'.strip()
+        result['log'] = '\n'.join(logs)
+        return result
+
+    # Show final commit (for visibility)
+    rc, out, err = _run_git(repo_path, ['rev-parse', 'HEAD'])
+    if rc == 0:
+        logs.append(f'HEAD: {out.strip()}')
+
+    result['pushed'] = True
+    result['log'] = '\n'.join(logs)
+    return result
 
 # --- Helper Functions for File I/O ---
 # These functions handle reading from and writing to the JSON files safely.
@@ -54,6 +200,10 @@ def write_json_file(filepath, data):
     except IOError as e:
         print(f"Error writing to file {filepath}: {e}")
 
+# NEW: simple extension checker used by upload/update routes (was missing)
+def _allowed_extension(filename: str) -> bool:
+    ext = os.path.splitext(filename)[1].lower()
+    return ext in ALLOWED_EXTENSIONS
 
 # --- Main Application Routes ---
 @app.route('/')
@@ -70,6 +220,14 @@ def get_receipt(filename):
     safe_name = safe_name.split('?', 1)[0]
     return send_from_directory(RECEIPTS_DIR, safe_name)
 
+# Return JSON for 413 on API routes instead of HTML
+from werkzeug.exceptions import RequestEntityTooLarge
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_file_too_large(e):
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'File too large. Max 10 MB.'}), 413
+    return ('File too large. Max 10 MB.', 413)
 
 # --- API Endpoints for Data Management ---
 
@@ -309,6 +467,42 @@ def update_receipt():
     except Exception as e:
         return jsonify({'error': f'Failed to update receipt: {e}'}), 500
 
+@app.route('/api/push', methods=['POST'])
+def push_to_github():
+    """
+    Push ../income and ../expenses repositories.
+    Only pushes repos with local changes; unchanged repos are reported as up-to-date.
+    Serialized to avoid concurrent pushes. Returns detailed logs.
+    To allow remote callers, set ALLOW_REMOTE_PUSH=1; otherwise restricted to localhost.
+    """
+    if os.environ.get('ALLOW_REMOTE_PUSH') != '1':
+        if request.remote_addr not in ('127.0.0.1', '::1'):
+            return jsonify({'error': 'Forbidden'}), 403
+
+    if not _git_available():
+        return jsonify({'error': 'git is not available on the server'}), 500
+
+    # Try to acquire the lock without blocking
+    if not _push_lock.acquire(blocking=False):
+        return jsonify({'error': 'Another push is in progress'}), 429
+
+    started = datetime.now()
+    try:
+        repos = []
+        repos.append(_commit_and_push(INCOME_REPO, 'income'))
+        repos.append(_commit_and_push(EXPENSES_REPO, 'expenses'))
+
+        success = all(r.get('error') is None for r in repos)
+        finished = datetime.now()
+        return jsonify({
+            'success': success,
+            'started_at': started.strftime('%Y-%m-%d %H:%M:%S'),
+            'finished_at': finished.strftime('%Y-%m-%d %H:%M:%S'),
+            'duration_ms': int((finished - started).total_seconds() * 1000),
+            'repos': repos
+        }), 200 if success else 207
+    finally:
+        _push_lock.release()
 
 # --- Main execution ---
 if __name__ == '__main__':

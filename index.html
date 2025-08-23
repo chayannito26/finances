@@ -138,6 +138,16 @@
         </div>
     </div>
 
+    <!-- New footer with blue Push to GitHub button -->
+    <footer class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <div class="text-center">
+            <button id="push-btn" class="hidden bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg inline-flex items-center gap-2 disabled:opacity-60">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <span id="push-btn-label">Push to GitHub</span>
+            </button>
+        </div>
+    </footer>
+
     <!-- Modals -->
     <div id="incomeModal" class="modal-wrapper fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 hidden">
         <div class="modal-content bg-white w-full max-w-md p-6 rounded-xl shadow-2xl transform scale-95">
@@ -337,6 +347,21 @@
         </div>
     </div>
 
+    <!-- Push result modal -->
+    <div id="pushModal" class="modal-wrapper fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-content bg-white w-full max-w-2xl p-6 rounded-xl shadow-2xl transform scale-95">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-2xl font-bold">Push Result</h3>
+                <button onclick="closePushModal()" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            </div>
+            <div id="push-summary" class="text-sm text-gray-700 mb-3"></div>
+            <pre id="push-log" class="text-xs bg-gray-100 p-3 rounded overflow-auto max-h-80"></pre>
+            <div class="flex justify-end mt-4">
+                <button onclick="closePushModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- DATA MANAGEMENT ---
         let revenues = [];
@@ -366,6 +391,8 @@
             setupCompressionControls();
             loadCashFields();
             setupCashFieldListeners();
+            const pushBtn = document.getElementById('push-btn');
+            if (pushBtn) pushBtn.addEventListener('click', pushToGitHub);
         });
 
         // --- Modal helpers to reset receipt inputs ---
@@ -424,6 +451,8 @@
                 revenues = data.revenues || [];
                 expenses = data.expenses || [];
                 isServerMode = true;
+                // Show push button in server mode
+                document.getElementById('push-btn')?.classList.remove('hidden');
                 render();
             } catch (error) {
                 console.error('Failed to load data from server:', error);
@@ -439,6 +468,8 @@
                 cashAtHandContainer.classList.remove('lg:text-left');
                 cashAtHandContainer.classList.add('lg:text-center');
 
+                // Hide push button in fallback mode
+                document.getElementById('push-btn')?.classList.add('hidden');
 
                 try {
                     const [revenuesResponse, expensesResponse] = await Promise.all([
@@ -887,10 +918,12 @@
                     method: 'POST',
                     body: formData
                 });
-                const result = await response.json();
+                const txt = await response.text(); // robust parsing
+                let result = null;
+                try { result = JSON.parse(txt); } catch (_) {}
 
                 if (!response.ok) {
-                    throw new Error(result.error || 'Upload failed');
+                    throw new Error((result && result.error) || txt || 'Upload failed');
                 }
 
                 tempReceipts.push({
@@ -986,8 +1019,9 @@
         // --- Edit Receipt Modal Logic ---
         let editState = {
             index: null,
-            original: null,        // original receipt object
-            chosenFile: null,      // File chosen (or fetched) for compression/upload
+            original: null,
+            chosenFile: null,
+            userWantsReplace: false, // NEW: only send file when user opts to replace
             compression: {
                 enabled: false,
                 original: { width: 0, height: 0, size: 0, type: '' },
@@ -1003,6 +1037,7 @@
                 index: null,
                 original: null,
                 chosenFile: null,
+                userWantsReplace: false, // NEW
                 compression: {
                     enabled: false,
                     original: { width: 0, height: 0, size: 0, type: '' },
@@ -1040,7 +1075,8 @@
                     const resp = await fetch(r.url, { cache: 'no-store' });
                     const blob = await resp.blob();
                     const file = new File([blob], oldFile, { type: blob.type || 'image/jpeg' });
-                    prepareEditCompression(file);
+                    // Note: auto-loaded file does NOT imply user wants to replace
+                    prepareEditCompression(file, false); // CHANGED
                     document.getElementById('edit-receipt-selected-name').textContent = oldFile + ' (current)';
                     document.getElementById('edit-receipt-clear-btn').classList.remove('hidden');
                 }
@@ -1069,6 +1105,7 @@
                     editState.compression.percent = parseInt(btn.dataset.percent || '100', 10);
                     updateEditCompressionLabels();
                     if (editState.compression.enabled) computeEditCompressedBlob();
+                    editState.userWantsReplace = true; // NEW: user action implies replace
                 });
             });
 
@@ -1077,6 +1114,7 @@
                 editState.compression.quality = q / 100;
                 document.getElementById('edit-compress-quality-label').textContent = String(q);
                 if (editState.compression.enabled) computeEditCompressedBlob();
+                editState.userWantsReplace = true; // NEW
             });
 
             // default 100%
@@ -1084,8 +1122,10 @@
             if (def) { def.classList.add('preset-active'); def.classList.remove('preset-inactive'); }
         }
 
-        function prepareEditCompression(file) {
+        // Accept a flag to indicate whether the file selection was user-initiated
+        function prepareEditCompression(file, userInitiated = false) {
             editState.chosenFile = file;
+            if (userInitiated) editState.userWantsReplace = true; // NEW
             const isGif = file.type === 'image/gif';
             if (file.type.startsWith('image/') && !isGif) {
                 editState.compression.enabled = true;
@@ -1173,12 +1213,14 @@
             }
             nameSpan.textContent = f.name;
             document.getElementById('edit-receipt-clear-btn').classList.remove('hidden');
-            prepareEditCompression(f);
+            // Mark as user-initiated selection
+            prepareEditCompression(f, true); // CHANGED
         });
 
         document.getElementById('edit-receipt-clear-btn').addEventListener('click', () => {
             document.getElementById('edit-receipt-file-input').value = '';
             document.getElementById('edit-receipt-selected-name').textContent = '';
+            editState.userWantsReplace = false; // NEW: clear user intent
             // Restore to state of fetched original (if available) with compression
             if (editState.original) {
                 const oldFile = editState.original.filename || (editState.original.url ? stripQuery(editState.original.url).split('/').pop() : '');
@@ -1221,19 +1263,29 @@
 
             // Decide which file to send (if any)
             let fileToSend = null;
-            if (editState.compression.enabled && editState.compression.blob) {
-                // compressed JPEG
+            if (editState.userWantsReplace && editState.compression.enabled && editState.compression.blob) {
                 const jpgName = `${safeBase}.jpg`;
                 fileToSend = new File([editState.compression.blob], jpgName, { type: 'image/jpeg' });
             } else if (document.getElementById('edit-receipt-file-input').files.length > 0) {
                 fileToSend = document.getElementById('edit-receipt-file-input').files[0];
             }
-            if (fileToSend) formData.append('receipt', fileToSend);
+            if (fileToSend) {
+                // Guard against 10MB server limit to avoid HTML 413 responses
+                if (fileToSend.size > MAX_RECEIPT_SIZE_BYTES) {
+                    alert(`File too large (${formatBytes(fileToSend.size)}). Max allowed is 10 MB.`);
+                    return;
+                }
+                formData.append('receipt', fileToSend);
+            }
 
             try {
                 const resp = await fetch('/api/update_receipt', { method: 'POST', body: formData });
-                const result = await resp.json();
-                if (!resp.ok) throw new Error(result.error || 'Update failed');
+                const text = await resp.text(); // robust parsing
+                let result = null;
+                try { result = JSON.parse(text); } catch (_) {}
+                if (!resp.ok) {
+                    throw new Error((result && result.error) || text || `HTTP ${resp.status}`);
+                }
 
                 // update local state + cache-bust url to avoid stale cache
                 const vUrl = `${result.url}?v=${Date.now()}`;
@@ -1259,6 +1311,68 @@
 
         // --- INITIAL DATA LOADING, RENDERING, CRUD, etc. ---
         // ...existing code...
+
+        let pushing = false;
+
+        async function pushToGitHub() {
+            if (pushing) return;
+            pushing = true;
+            const btn = document.getElementById('push-btn');
+            const label = document.getElementById('push-btn-label');
+            const orig = label.textContent;
+            btn.disabled = true;
+            label.textContent = 'Pushing...';
+
+            try {
+                const resp = await fetch('/api/push', { method: 'POST' });
+                const result = await resp.json().catch(() => ({}));
+                if (!resp.ok) {
+                    const msg = result && result.error ? result.error : `HTTP ${resp.status}`;
+                    showPushResult(false, `Push failed: ${msg}`, '');
+                    return;
+                }
+
+                const ok = !!result.success;
+                const lines = [];
+                (result.repos || []).forEach(r => {
+                    const status = r.error ? 'FAILED' : (r.pushed ? 'pushed' : (r.committed ? 'committed' : 'up-to-date'));
+                    lines.push(`• ${r.name}: ${status}${r.changed ? ' (changes detected)' : ''}`);
+                });
+                const summary = [
+                    ok ? 'Push completed.' : 'Push completed with errors.',
+                    result.started_at && result.finished_at ? `Time: ${result.started_at} → ${result.finished_at} (${result.duration_ms || 0} ms)` : ''
+                ].concat(lines).join('\n').trim();
+
+                const logs = (result.repos || []).map(r => {
+                    const header = `===== ${r.name.toUpperCase()} =====`;
+                    const body = (r.log || '').trim();
+                    const err = r.error ? `\nERROR: ${r.error}` : '';
+                    return `${header}\n${body}${err}`;
+                }).join('\n\n');
+
+                showPushResult(ok, summary, logs);
+            } catch (e) {
+                showPushResult(false, `Push failed: ${e.message}`, '');
+            } finally {
+                btn.disabled = false;
+                label.textContent = orig;
+                pushing = false;
+            }
+        }
+
+        function showPushResult(success, summary, logs) {
+            const modal = document.getElementById('pushModal');
+            document.getElementById('push-summary').textContent = summary;
+            document.getElementById('push-log').textContent = logs || '';
+            modal.classList.remove('hidden');
+            document.body.classList.add('modal-active');
+        }
+
+        function closePushModal() {
+            const modal = document.getElementById('pushModal');
+            modal.classList.add('hidden');
+            document.body.classList.remove('modal-active');
+        }
     </script>
 </body>
 </html>
