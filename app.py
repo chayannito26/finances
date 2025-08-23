@@ -205,6 +205,86 @@ def _allowed_extension(filename: str) -> bool:
     ext = os.path.splitext(filename)[1].lower()
     return ext in ALLOWED_EXTENSIONS
 
+# NEW: helpers to sort entries by date (newest first)
+def _parse_any_date_to_ts(value):
+    """
+    Try to parse a date/time value into a UNIX timestamp (seconds).
+    Supports:
+      - ISO 8601 strings (e.g., 2024-05-01 or 2024-05-01T12:34:56[Z])
+      - Common date formats with/without time
+      - Numeric timestamps (seconds or milliseconds)
+    """
+    if value is None:
+        return None
+
+    # Numeric timestamp handling
+    try:
+        num = float(value)
+        # Heuristic: treat very large numbers as milliseconds
+        if num > 10**12:
+            return num / 1000.0
+        return num
+    except (TypeError, ValueError):
+        pass
+
+    if isinstance(value, str):
+        s = value.strip()
+        # ISO 8601
+        try:
+            iso = s.replace('Z', '+00:00')
+            return datetime.fromisoformat(iso).timestamp()
+        except Exception:
+            pass
+
+        # Common formats
+        fmts = [
+            '%Y-%m-%d',
+            '%Y/%m/%d',
+            '%d/%m/%Y',
+            '%m/%d/%Y',
+            '%Y-%m-%d %H:%M',
+            '%Y-%m-%d %H:%M:%S',
+            '%Y/%m/%d %H:%M',
+            '%Y/%m/%d %H:%M:%S',
+            '%d/%m/%Y %H:%M',
+            '%d/%m/%Y %H:%M:%S',
+            '%m/%d/%Y %H:%M',
+            '%m/%d/%Y %H:%M:%S',
+            '%d-%m-%Y',
+            '%Y-%m-%d %H:%M:%S.%f',
+        ]
+        for fmt in fmts:
+            try:
+                return datetime.strptime(s, fmt).timestamp()
+            except ValueError:
+                continue
+
+    return None
+
+def _item_ts_for_sort(item):
+    """Derive a timestamp from an item using date-like fields or id as fallback."""
+    if not isinstance(item, dict):
+        return 0.0
+
+    for key in ('date', 'createdAt', 'created_at'):
+        ts = _parse_any_date_to_ts(item.get(key))
+        if ts is not None:
+            return ts
+
+    # Fallback to id if it looks like a timestamp
+    ts = _parse_any_date_to_ts(item.get('id'))
+    if ts is not None:
+        return ts
+
+    return 0.0
+
+def _sort_by_date_desc(items):
+    """Return items sorted from newest to oldest."""
+    try:
+        return sorted(items or [], key=_item_ts_for_sort, reverse=True)
+    except Exception:
+        return items or []
+
 # --- Main Application Routes ---
 @app.route('/')
 def index():
@@ -236,6 +316,11 @@ def get_all_data():
     """API endpoint to fetch all income and expense data."""
     income_data = read_json_file(INCOME_FILE)
     expenses_data = read_json_file(EXPENSES_FILE)
+
+    # NEW: sort by date (newest first)
+    income_data = _sort_by_date_desc(income_data)
+    expenses_data = _sort_by_date_desc(expenses_data)
+
     return jsonify({
         'revenues': income_data,
         'expenses': expenses_data
