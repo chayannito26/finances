@@ -133,7 +133,7 @@
             <div class="bg-white rounded-xl shadow-lg p-6">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-2xl font-bold">Income</h2>
-                    <button onclick="openModal('incomeModal', true)" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-transform transform hover:scale-105">
+                    <button id="add-income-btn" onclick="openModal('incomeModal', true)" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-transform transform hover:scale-105">
                         <i class="fas fa-plus mr-2"></i> Add Income
                     </button>
                 </div>
@@ -145,7 +145,7 @@
                                 <th class="p-4 font-semibold">Amount</th>
                                 <th class="p-4 font-semibold">Date</th>
                                 <th class="p-4 font-semibold">Clients</th>
-                                <th class="p-4 font-semibold text-right">Actions</th>
+                                <th id="income-actions-th" class="p-4 font-semibold text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="income-table"></tbody>
@@ -157,7 +157,7 @@
             <div class="bg-white rounded-xl shadow-lg p-6">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-2xl font-bold">Expenses</h2>
-                    <button onclick="openModal('expenseModal', true)" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-transform transform hover:scale-105">
+                    <button id="add-expense-btn" onclick="openModal('expenseModal', true)" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-transform transform hover:scale-105">
                         <i class="fas fa-plus mr-2"></i> Add Expense
                     </button>
                 </div>
@@ -169,7 +169,7 @@
                                 <th class="p-4 font-semibold">Amount</th>
                                 <th class="p-4 font-semibold">Date</th>
                                 <th class="p-4 font-semibold">Receipts</th>
-                                <th class="p-4 font-semibold text-right">Actions</th>
+                                <th id="expense-actions-th" class="p-4 font-semibold text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="expense-table"></tbody>
@@ -491,8 +491,14 @@
                 revenues = data.revenues || [];
                 expenses = data.expenses || [];
                 isServerMode = true;
+                // Ensure add/edit UI is available in server mode
+                document.getElementById('add-income-btn')?.classList.remove('hidden');
+                document.getElementById('add-expense-btn')?.classList.remove('hidden');
                 // Show push button in server mode
                 document.getElementById('push-btn')?.classList.remove('hidden');
+                // Show actions column headers
+                document.getElementById('income-actions-th')?.classList.remove('hidden');
+                document.getElementById('expense-actions-th')?.classList.remove('hidden');
                 render();
             } catch (error) {
                 console.error('Failed to load data from server:', error);
@@ -524,6 +530,12 @@
                     revenues = await revenuesResponse.json() || [];
                     expenses = await expensesResponse.json() || [];
                     isServerMode = false;
+                        // Hide add/edit UI in fallback (read-only)
+                        document.getElementById('add-income-btn')?.classList.add('hidden');
+                        document.getElementById('add-expense-btn')?.classList.add('hidden');
+                    // Hide actions column headers in fallback
+                    document.getElementById('income-actions-th')?.classList.add('hidden');
+                    document.getElementById('expense-actions-th')?.classList.add('hidden');
                     render();
                 } catch (fallbackError) {
                     console.error('Failed to load fallback data:', fallbackError);
@@ -548,17 +560,22 @@
 
         function renderIncomeTable() {
             const tableBody = document.getElementById('income-table');
-            tableBody.innerHTML = revenues.map(item => `
+            tableBody.innerHTML = revenues.map(item => {
+                const actionCell = isServerMode ? `
+                    <td class="p-4 text-right whitespace-nowrap">
+                        <button onclick="editIncome(${item.id})" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-edit"></i></button>
+                        <button onclick="deleteIncome(${item.id})" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
+                    </td>` : '';
+
+                return `
                 <tr class="border-b hover:bg-gray-50">
                     <td class="p-4">${item.source || ''}</td>
                     <td class="p-4 text-green-600 font-medium">${formatCurrency(item.amount || 0)}</td>
                     <td class="p-4">${item.date || ''}</td>
                     <td class="p-4">${(item.clients || []).join(', ')}</td>
-                    <td class="p-4 text-right whitespace-nowrap">
-                        <button onclick="editIncome(${item.id})" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-edit"></i></button>
-                        <button onclick="deleteIncome(${item.id})" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
-                    </td>
-                </tr>`).join('');
+                    ${actionCell}
+                </tr>`;
+            }).join('');
         }
 
         function renderExpenseTable() {
@@ -583,10 +600,11 @@
                     <td class="p-4 text-red-600 font-medium">${formatCurrency(item.amount || 0)}</td>
                     <td class="p-4">${item.date || ''}</td>
                     <td class="p-4">${receiptsHtml}</td>
+                    ${isServerMode ? `
                     <td class="p-4 text-right whitespace-nowrap">
                         <button onclick="editExpense(${item.id})" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-edit"></i></button>
                         <button onclick="deleteExpense(${item.id})" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
-                    </td>
+                    </td>` : ''}
                 </tr>`}).join('');
         }
 
@@ -605,6 +623,10 @@
 
         // --- MODAL HANDLING ---
         function openModal(modalId, isNew = false) {
+            if (isNew && !isServerMode) {
+                alert('Read-only mode: cannot add items when using fallback data.');
+                return;
+            }
             if (isNew) {
                 const today = new Date().toISOString().split('T')[0];
                 if (modalId === 'incomeModal') {
@@ -683,6 +705,7 @@
         });
 
         function editIncome(id) {
+            if (!isServerMode) { alert('Read-only mode: cannot edit items when using fallback data.'); return; }
             const income = revenues.find(item => item.id === id);
             if (income) {
                 document.getElementById('income-modal-title').innerText = 'Edit Income';
@@ -698,6 +721,7 @@
         }
 
         async function deleteIncome(id) {
+            if (!isServerMode) { alert('Read-only mode: cannot delete items when using fallback data.'); return; }
             if (confirm('Are you sure you want to delete this income entry?')) {
                 await fetch(`/api/income/${id}`, { method: 'DELETE' });
                 loadInitialData();
@@ -705,6 +729,7 @@
         }
 
         function editExpense(id) {
+            if (!isServerMode) { alert('Read-only mode: cannot edit items when using fallback data.'); return; }
             const expense = expenses.find(item => item.id === id);
             if (expense) {
                 document.getElementById('expense-modal-title').innerText = 'Edit Expense';
@@ -723,6 +748,7 @@
         }
 
         async function deleteExpense(id) {
+            if (!isServerMode) { alert('Read-only mode: cannot delete items when using fallback data.'); return; }
             if (confirm('Are you sure you want to delete this expense entry?')) {
                 await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
                 loadInitialData();
