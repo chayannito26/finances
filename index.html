@@ -72,8 +72,12 @@
         /* Push toolbar centered below the header */
         .push-toolbar {
             position: relative;
-            z-index: 20;
+            z-index: 10; /* keep below modals */
             background: transparent;
+        }
+        /* Modal wrappers should sit above page UI including push toolbar */
+        .modal-wrapper {
+            z-index: 40;
         }
         .push-toolbar-inner { max-width: 1100px; margin: 0 auto; padding: 0.5rem 1rem; display:flex; justify-content:center; }
         @media (min-width: 1024px) {
