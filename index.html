@@ -533,6 +533,9 @@
 
                     revenues = await revenuesResponse.json() || [];
                     expenses = await expensesResponse.json() || [];
+                    // Ensure fallback data is in correct order (oldest first)
+                    revenues = Array.isArray(revenues) ? [...revenues].reverse() : revenues;
+                    expenses = Array.isArray(expenses) ? [...expenses].reverse() : expenses;
                     isServerMode = false;
                         // Hide add/edit UI in fallback (read-only)
                         document.getElementById('add-income-btn')?.classList.add('hidden');
