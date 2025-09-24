@@ -130,6 +130,15 @@
                     </div>
                 </div>
             </div>
+            <!-- Time Machine controls -->
+            <div class="mt-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                <div id="as-of-status" class="text-sm text-gray-600">Viewing all data (live)</div>
+                <div class="flex items-center gap-2">
+                    <label for="as-of-input" class="text-sm text-gray-700">As of</label>
+                    <input type="date" id="as-of-input" class="px-3 py-2 border border-gray-300 rounded-lg">
+                    <button id="as-of-clear" class="text-sm px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50">Clear</button>
+                </div>
+            </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -412,6 +421,7 @@
         let expenses = [];
         let tempReceipts = []; // To hold receipts before saving an expense
         let isServerMode = false; // server vs GitHub fallback
+        let asOfDate = null; // 'YYYY-MM-DD' or null
 
         // Compression / upload state
         const ALLOWED_RECEIPT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf'];
@@ -437,7 +447,90 @@
             setupCashFieldListeners();
             const pushBtn = document.getElementById('push-btn');
             if (pushBtn) pushBtn.addEventListener('click', pushToGitHub);
+            // Time Machine listeners
+            const asOfInput = document.getElementById('as-of-input');
+            const asOfClear = document.getElementById('as-of-clear');
+            if (asOfInput) {
+                asOfInput.addEventListener('change', (e) => setAsOfDate(e.target.value || null));
+            }
+            if (asOfClear) {
+                asOfClear.addEventListener('click', () => {
+                    const el = document.getElementById('as-of-input');
+                    if (el) el.value = '';
+                    setAsOfDate(null);
+                });
+            }
+            updateAsOfUI();
         });
+
+        // --- TIME MACHINE HELPERS ---
+        function setAsOfDate(dateStrOrNull) {
+            asOfDate = dateStrOrNull && String(dateStrOrNull).trim() ? String(dateStrOrNull).trim() : null;
+            updateAsOfUI();
+            // No need to refetch; filter client-side for both modes
+            render();
+        }
+
+        function updateAsOfUI() {
+            const status = document.getElementById('as-of-status');
+            if (!status) return;
+            if (!asOfDate) {
+                status.textContent = 'Viewing all data (live)';
+            } else {
+                status.textContent = `Viewing as of ${asOfDate} (end of day)`;
+            }
+        }
+
+        function parseAnyDateToMs(value) {
+            if (value === null || value === undefined) return null;
+            // number-like
+            if (typeof value === 'number') {
+                // Heuristic: treat very large numbers as ms, others as seconds
+                return value > 1e12 ? value : (value > 1e10 ? value : value * 1000);
+            }
+            const s = String(value).trim();
+            if (!s) return null;
+            // digits only
+            if (/^\d{10,}$/.test(s)) {
+                const num = parseInt(s, 10);
+                return s.length >= 13 ? num : num * 1000;
+            }
+            // Try Date.parse (supports YYYY-MM-DD and ISO strings)
+            const t = Date.parse(s.replace('Z', ''));
+            if (!Number.isNaN(t)) return t;
+            return null;
+        }
+
+        function itemTimestampMs(item) {
+            if (!item || typeof item !== 'object') return null;
+            const keys = ['date', 'createdAt', 'created_at'];
+            for (const k of keys) {
+                const ts = parseAnyDateToMs(item[k]);
+                if (ts !== null) return ts;
+            }
+            // fallback to id
+            const ts = parseAnyDateToMs(item.id);
+            return ts !== null ? ts : null;
+        }
+
+        function getCutoffMs() {
+            if (!asOfDate) return Number.POSITIVE_INFINITY;
+            // Inclusive end-of-day local time
+            const ms = Date.parse(`${asOfDate}T23:59:59.999`);
+            return Number.isNaN(ms) ? Number.POSITIVE_INFINITY : ms;
+        }
+
+        function filterAsOf(items) {
+            if (!asOfDate) return items || [];
+            const cutoff = getCutoffMs();
+            return (items || []).filter(it => {
+                const ts = itemTimestampMs(it);
+                return ts !== null ? ts <= cutoff : false;
+            });
+        }
+
+        function activeRevenues() { return filterAsOf(revenues); }
+        function activeExpenses() { return filterAsOf(expenses); }
 
         // --- Modal helpers to reset receipt inputs ---
         function resetReceiptInputs() {
@@ -567,7 +660,8 @@
 
         function renderIncomeTable() {
             const tableBody = document.getElementById('income-table');
-            tableBody.innerHTML = revenues.map(item => {
+            const rows = activeRevenues();
+            tableBody.innerHTML = rows.map(item => {
                 const actionCell = isServerMode ? `
                     <td class="p-4 text-right whitespace-nowrap">
                         <button onclick="editIncome(${item.id})" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-edit"></i></button>
@@ -587,7 +681,8 @@
 
         function renderExpenseTable() {
             const tableBody = document.getElementById('expense-table');
-            tableBody.innerHTML = expenses.map(item => {
+            const rows = activeExpenses();
+            tableBody.innerHTML = rows.map(item => {
                 const receiptsHtml = (item.receipts && Array.isArray(item.receipts) && item.receipts.length > 0)
                     ? item.receipts.map(r => {
                         let url = r.url || '';
@@ -616,8 +711,10 @@
         }
 
         function calculateCashAtHand() {
-            const totalIncome = revenues.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
-            const totalExpenses = expenses.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+            const actsRev = activeRevenues();
+            const actsExp = activeExpenses();
+            const totalIncome = actsRev.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+            const totalExpenses = actsExp.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
             document.getElementById('cash-at-hand').textContent = formatCurrency(totalIncome - totalExpenses);
         }
 
