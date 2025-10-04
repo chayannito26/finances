@@ -338,9 +338,17 @@ def manage_income():
     item_id = data.get('id')
 
     # If an ID exists, it's an update; otherwise, it's a new entry.
-    if item_id and any(item['id'] == item_id for item in all_income):
+    # Normalize IDs to integers for comparison to handle type mismatches
+    if item_id is not None:
+        try:
+            item_id = int(item_id)
+            data['id'] = item_id
+        except (ValueError, TypeError):
+            item_id = None
+    
+    if item_id and any(int(item.get('id', -1)) == item_id for item in all_income):
         # Update existing item
-        all_income = [data if item['id'] == item_id else item for item in all_income]
+        all_income = [data if int(item.get('id', -1)) == item_id else item for item in all_income]
     else:
         # Add new item with a unique ID
         data['id'] = int(time.time() * 1000) # Generate a new timestamp-based ID
@@ -374,9 +382,17 @@ def manage_expense():
     item_id = data.get('id')
 
     # If an ID exists, it's an update; otherwise, it's a new entry.
-    if item_id and any(item['id'] == item_id for item in all_expenses):
+    # Normalize IDs to integers for comparison to handle type mismatches
+    if item_id is not None:
+        try:
+            item_id = int(item_id)
+            data['id'] = item_id
+        except (ValueError, TypeError):
+            item_id = None
+    
+    if item_id and any(int(item.get('id', -1)) == item_id for item in all_expenses):
         # Update existing item
-        all_expenses = [data if item['id'] == item_id else item for item in all_expenses]
+        all_expenses = [data if int(item.get('id', -1)) == item_id else item for item in all_expenses]
     else:
         # Add new item
         data['id'] = int(time.time() * 1000) # Generate a new timestamp-based ID
