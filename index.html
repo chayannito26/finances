@@ -24,6 +24,7 @@
     <meta name="twitter:site" content="@chayannito26">
     <meta name="twitter:creator" content="@wasi_master">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -83,11 +84,53 @@
         @media (min-width: 1024px) {
             .push-toolbar-inner { padding: 0.75rem 1.5rem; }
         }
+        /* Navigation active state */
+        .nav-btn.active {
+            background-color: #eef2ff;
+            color: #4f46e5;
+        }
+        /* Progress bar for top items */
+        .progress-bar {
+            height: 8px;
+            border-radius: 4px;
+            background: #e5e7eb;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        /* Fallback for hidden class when Tailwind doesn't load */
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
 
-    <div class="mx-auto p-4 sm:p-6 lg:p-8 max-w-none">>
+    <!-- Navigation Bar -->
+    <nav class="bg-white shadow-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-xl font-bold text-indigo-600">Finance Manager</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="nav-dashboard" onclick="showPage('dashboard')" class="nav-btn px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
+                        <i class="fas fa-home mr-2"></i>Dashboard
+                    </button>
+                    <button id="nav-statistics" onclick="showPage('statistics')" class="nav-btn px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
+                        <i class="fas fa-chart-bar mr-2"></i>Statistics
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Dashboard Page -->
+    <div id="dashboard-page" class="page-content">
+    <div class="mx-auto p-4 sm:p-6 lg:p-8 max-w-none">
         <header class="text-center mb-8">
             <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Finance Dashboard</h1>
             <p class="text-gray-600 mt-2">Your data is now saved automatically.</p>
@@ -196,6 +239,345 @@
             </div>
         </div>
     </div>
+    </div>
+    </div>
+    <!-- End Dashboard Page -->
+
+    <!-- Statistics Page -->
+    <div id="statistics-page" class="page-content hidden">
+    <div class="mx-auto p-4 sm:p-6 lg:p-8 max-w-7xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Financial Statistics</h1>
+            <p class="text-gray-600 mt-2">Detailed insights into your financial data</p>
+        </header>
+
+        <!-- Loading State -->
+        <div id="stats-loading" class="text-center py-12">
+            <i class="fas fa-spinner fa-spin text-4xl text-indigo-600 mb-4"></i>
+            <p class="text-gray-600">Loading statistics...</p>
+        </div>
+
+        <!-- Statistics Content -->
+        <div id="stats-content" class="hidden">
+            <!-- Overview Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Total Income</p>
+                            <p id="stat-total-income" class="text-2xl font-bold text-green-600">৳0</p>
+                        </div>
+                        <div class="p-3 bg-green-100 rounded-full">
+                            <i class="fas fa-arrow-up text-green-600"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2"><span id="stat-income-count">0</span> transactions</p>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Total Expenses</p>
+                            <p id="stat-total-expenses" class="text-2xl font-bold text-red-600">৳0</p>
+                        </div>
+                        <div class="p-3 bg-red-100 rounded-full">
+                            <i class="fas fa-arrow-down text-red-600"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2"><span id="stat-expense-count">0</span> transactions</p>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Net Balance</p>
+                            <p id="stat-net-balance" class="text-2xl font-bold text-indigo-600">৳0</p>
+                        </div>
+                        <div class="p-3 bg-indigo-100 rounded-full">
+                            <i class="fas fa-wallet text-indigo-600"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">Savings rate: <span id="stat-savings-rate">0</span>%</p>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Total Transactions</p>
+                            <p id="stat-total-transactions" class="text-2xl font-bold text-gray-800">0</p>
+                        </div>
+                        <div class="p-3 bg-gray-100 rounded-full">
+                            <i class="fas fa-exchange-alt text-gray-600"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2"><span id="stat-total-receipts">0</span> receipts attached</p>
+                </div>
+            </div>
+
+            <!-- Current Period Stats -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-calendar-day mr-2 text-indigo-500"></i>This Month</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Income</span>
+                            <span id="stat-this-month-income" class="font-medium text-green-600">৳0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Expenses</span>
+                            <span id="stat-this-month-expenses" class="font-medium text-red-600">৳0</span>
+                        </div>
+                        <div class="border-t pt-2 flex justify-between">
+                            <span class="font-medium text-gray-700">Net</span>
+                            <span id="stat-this-month-net" class="font-bold text-indigo-600">৳0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-calendar-alt mr-2 text-indigo-500"></i>Last Month</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Income</span>
+                            <span id="stat-last-month-income" class="font-medium text-green-600">৳0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Expenses</span>
+                            <span id="stat-last-month-expenses" class="font-medium text-red-600">৳0</span>
+                        </div>
+                        <div class="border-t pt-2 flex justify-between">
+                            <span class="font-medium text-gray-700">Net</span>
+                            <span id="stat-last-month-net" class="font-bold text-indigo-600">৳0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-calendar mr-2 text-indigo-500"></i>This Year</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Income</span>
+                            <span id="stat-this-year-income" class="font-medium text-green-600">৳0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Expenses</span>
+                            <span id="stat-this-year-expenses" class="font-medium text-red-600">৳0</span>
+                        </div>
+                        <div class="border-t pt-2 flex justify-between">
+                            <span class="font-medium text-gray-700">Net</span>
+                            <span id="stat-this-year-net" class="font-bold text-indigo-600">৳0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Average Stats -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-calculator mr-2 text-indigo-500"></i>Average per Transaction</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Avg Income</span>
+                            <span id="stat-avg-income" class="font-medium text-green-600">৳0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Avg Expense</span>
+                            <span id="stat-avg-expense" class="font-medium text-red-600">৳0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-sun mr-2 text-yellow-500"></i>Daily Averages</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Daily Income</span>
+                            <span id="stat-daily-avg-income" class="font-medium text-green-600">৳0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Daily Expense</span>
+                            <span id="stat-daily-avg-expense" class="font-medium text-red-600">৳0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-calendar-check mr-2 text-blue-500"></i>Monthly Averages</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Monthly Income</span>
+                            <span id="stat-monthly-avg-income" class="font-medium text-green-600">৳0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Monthly Expense</span>
+                            <span id="stat-monthly-avg-expense" class="font-medium text-red-600">৳0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Highest/Lowest Stats -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-trophy mr-2 text-yellow-500"></i>Record Transactions</h3>
+                    <div class="space-y-4">
+                        <div class="p-3 bg-green-50 rounded-lg">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm text-gray-500">Highest Income</p>
+                                    <p id="stat-highest-income-detail" class="text-sm text-gray-600 mt-1"></p>
+                                </div>
+                                <span id="stat-highest-income" class="text-xl font-bold text-green-600">৳0</span>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-red-50 rounded-lg">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm text-gray-500">Highest Expense</p>
+                                    <p id="stat-highest-expense-detail" class="text-sm text-gray-600 mt-1"></p>
+                                </div>
+                                <span id="stat-highest-expense" class="text-xl font-bold text-red-600">৳0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-info-circle mr-2 text-blue-500"></i>Transaction Range</h3>
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="p-3 bg-gray-50 rounded-lg text-center">
+                                <p class="text-xs text-gray-500">Lowest Income</p>
+                                <p id="stat-lowest-income" class="text-lg font-bold text-gray-700">৳0</p>
+                            </div>
+                            <div class="p-3 bg-gray-50 rounded-lg text-center">
+                                <p class="text-xs text-gray-500">Lowest Expense</p>
+                                <p id="stat-lowest-expense" class="text-lg font-bold text-gray-700">৳0</p>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-indigo-50 rounded-lg">
+                            <p class="text-xs text-gray-500 mb-1">Data Range</p>
+                            <p id="stat-date-range" class="text-sm font-medium text-indigo-700"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <!-- Monthly Trend Chart -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-chart-line mr-2 text-indigo-500"></i>Monthly Trend</h3>
+                    <div class="h-80">
+                        <canvas id="monthly-trend-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Income by Category Pie Chart -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-chart-pie mr-2 text-green-500"></i>Income by Category</h3>
+                    <div class="h-80">
+                        <canvas id="income-category-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Expense by Category Pie Chart -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-chart-pie mr-2 text-red-500"></i>Expenses by Category</h3>
+                    <div class="h-80">
+                        <canvas id="expense-category-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Weekly Trend Chart -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-chart-bar mr-2 text-blue-500"></i>Weekly Trend (Last 12 Weeks)</h3>
+                    <div class="h-80">
+                        <canvas id="weekly-trend-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Top Items Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <!-- Top Income Sources -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-star mr-2 text-yellow-500"></i>Top Income Sources</h3>
+                    <div id="top-income-sources" class="space-y-3"></div>
+                </div>
+
+                <!-- Top Expense Purposes -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-tags mr-2 text-red-500"></i>Top Expense Purposes</h3>
+                    <div id="top-expense-purposes" class="space-y-3"></div>
+                </div>
+            </div>
+
+            <!-- Category Breakdown Tables -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <!-- Income Categories -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-list mr-2 text-green-500"></i>Income Categories</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b">
+                                    <th class="p-2 text-sm font-medium text-gray-500">Category</th>
+                                    <th class="p-2 text-sm font-medium text-gray-500 text-right">Amount</th>
+                                    <th class="p-2 text-sm font-medium text-gray-500 text-right">Count</th>
+                                    <th class="p-2 text-sm font-medium text-gray-500 text-right">%</th>
+                                </tr>
+                            </thead>
+                            <tbody id="income-categories-table"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Expense Categories -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-list mr-2 text-red-500"></i>Expense Categories</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b">
+                                    <th class="p-2 text-sm font-medium text-gray-500">Category</th>
+                                    <th class="p-2 text-sm font-medium text-gray-500 text-right">Amount</th>
+                                    <th class="p-2 text-sm font-medium text-gray-500 text-right">Count</th>
+                                    <th class="p-2 text-sm font-medium text-gray-500 text-right">%</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expense-categories-table"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- People/Clients Analysis -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <!-- Top Clients -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-users mr-2 text-blue-500"></i>Top Clients (Income)</h3>
+                    <div id="top-clients" class="space-y-3"></div>
+                </div>
+
+                <!-- Top Expense Persons -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-user-friends mr-2 text-purple-500"></i>Top People (Expenses)</h3>
+                    <div id="top-expense-persons" class="space-y-3"></div>
+                </div>
+            </div>
+
+            <!-- Yearly Comparison -->
+            <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+                <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-chart-bar mr-2 text-indigo-500"></i>Yearly Comparison</h3>
+                <div class="h-80">
+                    <canvas id="yearly-comparison-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+    <!-- End Statistics Page -->
 
     <!-- Footer kept for other content; push button moved to top toolbar -->
     <footer class="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -1665,6 +2047,494 @@
             const modal = document.getElementById('pushModal');
             modal.classList.add('hidden');
             document.body.classList.remove('modal-active');
+        }
+
+        // --- PAGE NAVIGATION ---
+        let currentPage = 'dashboard';
+        let statisticsData = null;
+        let chartInstances = {};
+
+        function showPage(pageName) {
+            // Hide all pages
+            document.querySelectorAll('.page-content').forEach(page => {
+                page.classList.add('hidden');
+            });
+            
+            // Remove active state from all nav buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected page
+            const pageElement = document.getElementById(`${pageName}-page`);
+            if (pageElement) {
+                pageElement.classList.remove('hidden');
+            }
+            
+            // Set active nav button
+            const navBtn = document.getElementById(`nav-${pageName}`);
+            if (navBtn) {
+                navBtn.classList.add('active');
+            }
+            
+            currentPage = pageName;
+            
+            // Load statistics when switching to statistics page
+            if (pageName === 'statistics') {
+                loadStatistics();
+            }
+        }
+
+        // Initialize page navigation
+        document.addEventListener('DOMContentLoaded', () => {
+            showPage('dashboard');
+        });
+
+        // --- STATISTICS FUNCTIONS ---
+        async function loadStatistics() {
+            const loadingEl = document.getElementById('stats-loading');
+            const contentEl = document.getElementById('stats-content');
+            
+            loadingEl.classList.remove('hidden');
+            contentEl.classList.add('hidden');
+            
+            try {
+                const response = await fetch('/api/statistics');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                statisticsData = await response.json();
+                renderStatistics();
+                loadingEl.classList.add('hidden');
+                contentEl.classList.remove('hidden');
+            } catch (error) {
+                console.error('Failed to load statistics:', error);
+                loadingEl.innerHTML = `
+                    <div class="text-center py-12">
+                        <i class="fas fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
+                        <p class="text-gray-600">Failed to load statistics. Please try again.</p>
+                        <button onclick="loadStatistics()" class="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                            Retry
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        function renderStatistics() {
+            if (!statisticsData) return;
+            
+            const data = statisticsData;
+            
+            // Overview Cards
+            document.getElementById('stat-total-income').textContent = formatCurrency(data.overview.total_income);
+            document.getElementById('stat-total-expenses').textContent = formatCurrency(data.overview.total_expenses);
+            document.getElementById('stat-net-balance').textContent = formatCurrency(data.overview.net_balance);
+            document.getElementById('stat-savings-rate').textContent = data.overview.savings_rate;
+            document.getElementById('stat-income-count').textContent = data.overview.income_count;
+            document.getElementById('stat-expense-count').textContent = data.overview.expense_count;
+            document.getElementById('stat-total-transactions').textContent = data.overview.total_transactions;
+            document.getElementById('stat-total-receipts').textContent = data.overview.total_receipts;
+            
+            // Current Period Stats
+            document.getElementById('stat-this-month-income').textContent = formatCurrency(data.current_period.this_month_income);
+            document.getElementById('stat-this-month-expenses').textContent = formatCurrency(data.current_period.this_month_expenses);
+            document.getElementById('stat-this-month-net').textContent = formatCurrency(data.current_period.this_month_net);
+            document.getElementById('stat-last-month-income').textContent = formatCurrency(data.current_period.last_month_income);
+            document.getElementById('stat-last-month-expenses').textContent = formatCurrency(data.current_period.last_month_expenses);
+            document.getElementById('stat-last-month-net').textContent = formatCurrency(data.current_period.last_month_net);
+            document.getElementById('stat-this-year-income').textContent = formatCurrency(data.current_period.this_year_income);
+            document.getElementById('stat-this-year-expenses').textContent = formatCurrency(data.current_period.this_year_expenses);
+            document.getElementById('stat-this-year-net').textContent = formatCurrency(data.current_period.this_year_net);
+            
+            // Averages
+            document.getElementById('stat-avg-income').textContent = formatCurrency(data.averages.avg_income);
+            document.getElementById('stat-avg-expense').textContent = formatCurrency(data.averages.avg_expense);
+            document.getElementById('stat-daily-avg-income').textContent = formatCurrency(data.averages.daily_avg_income);
+            document.getElementById('stat-daily-avg-expense').textContent = formatCurrency(data.averages.daily_avg_expense);
+            document.getElementById('stat-monthly-avg-income').textContent = formatCurrency(data.averages.monthly_avg_income);
+            document.getElementById('stat-monthly-avg-expense').textContent = formatCurrency(data.averages.monthly_avg_expense);
+            
+            // Extremes
+            document.getElementById('stat-highest-income').textContent = formatCurrency(data.extremes.highest_income);
+            document.getElementById('stat-highest-expense').textContent = formatCurrency(data.extremes.highest_expense);
+            document.getElementById('stat-lowest-income').textContent = formatCurrency(data.extremes.lowest_income);
+            document.getElementById('stat-lowest-expense').textContent = formatCurrency(data.extremes.lowest_expense);
+            
+            // Highest item details
+            if (data.extremes.highest_income_item) {
+                const item = data.extremes.highest_income_item;
+                document.getElementById('stat-highest-income-detail').textContent = 
+                    `${item.source || 'Unknown'} - ${item.date || ''}`;
+            }
+            if (data.extremes.highest_expense_item) {
+                const item = data.extremes.highest_expense_item;
+                document.getElementById('stat-highest-expense-detail').textContent = 
+                    `${item.purpose || 'Unknown'} - ${item.date || ''}`;
+            }
+            
+            // Date Range
+            if (data.date_range.earliest && data.date_range.latest) {
+                document.getElementById('stat-date-range').textContent = 
+                    `${data.date_range.earliest} to ${data.date_range.latest} (${data.date_range.span_days} days)`;
+            } else {
+                document.getElementById('stat-date-range').textContent = 'No data available';
+            }
+            
+            // Render top items
+            renderTopItems('top-income-sources', data.top_items.income_sources, 'green');
+            renderTopItems('top-expense-purposes', data.top_items.expense_purposes, 'red');
+            renderTopItems('top-clients', data.top_items.clients, 'blue');
+            renderTopItems('top-expense-persons', data.top_items.expense_persons, 'purple');
+            
+            // Render category tables
+            renderCategoryTable('income-categories-table', data.by_category.income_by_type, data.by_category.income_count_by_type, data.overview.total_income);
+            renderCategoryTable('expense-categories-table', data.by_category.expense_by_type, data.by_category.expense_count_by_type, data.overview.total_expenses);
+            
+            // Render Charts
+            renderMonthlyTrendChart(data.trends.monthly);
+            renderIncomeCategoryChart(data.by_category.income_by_type);
+            renderExpenseCategoryChart(data.by_category.expense_by_type);
+            renderWeeklyTrendChart(data.trends.weekly);
+            renderYearlyComparisonChart(data.trends.yearly);
+        }
+
+        function renderTopItems(containerId, items, color) {
+            const container = document.getElementById(containerId);
+            if (!items || items.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-sm">No data available</p>';
+                return;
+            }
+            
+            const maxAmount = Math.max(...items.map(i => i.amount));
+            const colorClasses = {
+                green: { bg: 'bg-green-500', text: 'text-green-600' },
+                red: { bg: 'bg-red-500', text: 'text-red-600' },
+                blue: { bg: 'bg-blue-500', text: 'text-blue-600' },
+                purple: { bg: 'bg-purple-500', text: 'text-purple-600' }
+            };
+            const colors = colorClasses[color] || colorClasses.blue;
+            
+            container.innerHTML = items.map(item => {
+                const percentage = maxAmount > 0 ? (item.amount / maxAmount * 100) : 0;
+                return `
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1 min-w-0 mr-4">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-sm text-gray-700 truncate">${item.name}</span>
+                                <span class="text-sm font-medium ${colors.text}">${formatCurrency(item.amount)}</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill ${colors.bg}" style="width: ${percentage}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderCategoryTable(tableId, amountByType, countByType, total) {
+            const tbody = document.getElementById(tableId);
+            if (!amountByType || Object.keys(amountByType).length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="p-2 text-center text-gray-500">No data available</td></tr>';
+                return;
+            }
+            
+            const sortedTypes = Object.entries(amountByType).sort((a, b) => b[1] - a[1]);
+            
+            tbody.innerHTML = sortedTypes.map(([type, amount]) => {
+                const count = countByType[type] || 0;
+                const percentage = total > 0 ? (amount / total * 100).toFixed(1) : 0;
+                return `
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="p-2 text-sm">${type}</td>
+                        <td class="p-2 text-sm text-right font-medium">${formatCurrency(amount)}</td>
+                        <td class="p-2 text-sm text-right">${count}</td>
+                        <td class="p-2 text-sm text-right">${percentage}%</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // --- CHART FUNCTIONS ---
+        function destroyChart(chartId) {
+            if (chartInstances[chartId]) {
+                chartInstances[chartId].destroy();
+                delete chartInstances[chartId];
+            }
+        }
+
+        function renderMonthlyTrendChart(monthlyData) {
+            destroyChart('monthly-trend-chart');
+            
+            const ctx = document.getElementById('monthly-trend-chart');
+            if (!ctx || !monthlyData || monthlyData.length === 0) return;
+            
+            chartInstances['monthly-trend-chart'] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: monthlyData.map(d => d.month),
+                    datasets: [
+                        {
+                            label: 'Income',
+                            data: monthlyData.map(d => d.income),
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Expenses',
+                            data: monthlyData.map(d => d.expenses),
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Net',
+                            data: monthlyData.map(d => d.net),
+                            borderColor: '#6366f1',
+                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                            fill: false,
+                            tension: 0.3,
+                            borderDash: [5, 5]
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '৳' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderIncomeCategoryChart(incomeByType) {
+            destroyChart('income-category-chart');
+            
+            const ctx = document.getElementById('income-category-chart');
+            if (!ctx || !incomeByType || Object.keys(incomeByType).length === 0) return;
+            
+            const colors = generateColors(Object.keys(incomeByType).length);
+            
+            chartInstances['income-category-chart'] = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(incomeByType),
+                    datasets: [{
+                        data: Object.values(incomeByType),
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                boxWidth: 12
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${context.label}: ৳${value.toLocaleString()} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderExpenseCategoryChart(expenseByType) {
+            destroyChart('expense-category-chart');
+            
+            const ctx = document.getElementById('expense-category-chart');
+            if (!ctx || !expenseByType || Object.keys(expenseByType).length === 0) return;
+            
+            const colors = generateColors(Object.keys(expenseByType).length, true);
+            
+            chartInstances['expense-category-chart'] = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(expenseByType),
+                    datasets: [{
+                        data: Object.values(expenseByType),
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                boxWidth: 12
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${context.label}: ৳${value.toLocaleString()} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderWeeklyTrendChart(weeklyData) {
+            destroyChart('weekly-trend-chart');
+            
+            const ctx = document.getElementById('weekly-trend-chart');
+            if (!ctx || !weeklyData || weeklyData.length === 0) return;
+            
+            chartInstances['weekly-trend-chart'] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: weeklyData.map(d => d.week),
+                    datasets: [
+                        {
+                            label: 'Income',
+                            data: weeklyData.map(d => d.income),
+                            backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                            borderColor: '#10b981',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Expenses',
+                            data: weeklyData.map(d => d.expenses),
+                            backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                            borderColor: '#ef4444',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '৳' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderYearlyComparisonChart(yearlyData) {
+            destroyChart('yearly-comparison-chart');
+            
+            const ctx = document.getElementById('yearly-comparison-chart');
+            if (!ctx || !yearlyData || yearlyData.length === 0) return;
+            
+            chartInstances['yearly-comparison-chart'] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: yearlyData.map(d => d.year),
+                    datasets: [
+                        {
+                            label: 'Income',
+                            data: yearlyData.map(d => d.income),
+                            backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                            borderColor: '#10b981',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Expenses',
+                            data: yearlyData.map(d => d.expenses),
+                            backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                            borderColor: '#ef4444',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Net',
+                            data: yearlyData.map(d => d.net),
+                            backgroundColor: 'rgba(99, 102, 241, 0.8)',
+                            borderColor: '#6366f1',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '৳' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function generateColors(count, warm = false) {
+            const baseColors = warm ? [
+                '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
+                '#22c55e', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6',
+                '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899',
+                '#f43f5e'
+            ] : [
+                '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6',
+                '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899',
+                '#f43f5e', '#ef4444', '#f97316', '#f59e0b', '#eab308',
+                '#84cc16'
+            ];
+            
+            const colors = [];
+            for (let i = 0; i < count; i++) {
+                colors.push(baseColors[i % baseColors.length]);
+            }
+            return colors;
         }
     </script>
 </body>
