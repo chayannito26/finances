@@ -569,6 +569,10 @@ def update_receipt():
         return jsonify({'error': f'Failed to update receipt: {e}'}), 500
 
 # --- Statistics API ---
+# Constants for statistics
+STATS_TOP_ITEMS_LIMIT = 10  # Number of top items to return
+STATS_RECENT_WEEKS = 12     # Number of recent weeks to include in weekly trends
+
 @app.route('/api/statistics', methods=['GET'])
 def get_statistics():
     """API endpoint to compute and return comprehensive statistics."""
@@ -693,7 +697,7 @@ def get_statistics():
         if week_key:
             expense_by_week[week_key] += float(item.get('amount', 0) or 0)
     
-    all_weeks = sorted(set(list(income_by_week.keys()) + list(expense_by_week.keys())))[-12:]
+    all_weeks = sorted(set(list(income_by_week.keys()) + list(expense_by_week.keys())))[-STATS_RECENT_WEEKS:]
     weekly_trend = []
     for week in all_weeks:
         weekly_trend.append({
@@ -708,14 +712,14 @@ def get_statistics():
     for item in income_data:
         source = item.get('source', 'Unknown') or 'Unknown'
         income_by_source[source] += float(item.get('amount', 0) or 0)
-    top_income_sources = sorted(income_by_source.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_income_sources = sorted(income_by_source.items(), key=lambda x: x[1], reverse=True)[:STATS_TOP_ITEMS_LIMIT]
     
     # Top expense purposes (by total amount)
     expense_by_purpose = defaultdict(float)
     for item in expenses_data:
         purpose = item.get('purpose', 'Unknown') or 'Unknown'
         expense_by_purpose[purpose] += float(item.get('amount', 0) or 0)
-    top_expense_purposes = sorted(expense_by_purpose.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_expense_purposes = sorted(expense_by_purpose.items(), key=lambda x: x[1], reverse=True)[:STATS_TOP_ITEMS_LIMIT]
     
     # Highest/lowest transactions
     all_income_amounts = [float(item.get('amount', 0) or 0) for item in income_data]
@@ -738,7 +742,7 @@ def get_statistics():
             for client in clients:
                 if client:
                     income_by_client[client] += float(item.get('amount', 0) or 0)
-    top_clients = sorted(income_by_client.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_clients = sorted(income_by_client.items(), key=lambda x: x[1], reverse=True)[:STATS_TOP_ITEMS_LIMIT]
     
     expense_by_person = defaultdict(float)
     for item in expenses_data:
@@ -747,7 +751,7 @@ def get_statistics():
             for person in persons:
                 if person:
                     expense_by_person[person] += float(item.get('amount', 0) or 0)
-    top_expense_persons = sorted(expense_by_person.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_expense_persons = sorted(expense_by_person.items(), key=lambda x: x[1], reverse=True)[:STATS_TOP_ITEMS_LIMIT]
     
     # Receipt statistics
     total_receipts = sum(len(item.get('receipts', []) or []) for item in expenses_data)
