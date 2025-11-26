@@ -568,6 +568,313 @@ def update_receipt():
     except Exception as e:
         return jsonify({'error': f'Failed to update receipt: {e}'}), 500
 
+# --- Statistics API ---
+# Constants for statistics
+STATS_TOP_ITEMS_LIMIT = 10  # Number of top items to return
+STATS_RECENT_WEEKS = 12     # Number of recent weeks to include in weekly trends
+
+@app.route('/api/statistics', methods=['GET'])
+def get_statistics():
+    """API endpoint to compute and return comprehensive statistics."""
+    from collections import defaultdict
+    from datetime import datetime, timedelta
+    import calendar
+    
+    income_data = read_json_file(INCOME_FILE)
+    expenses_data = read_json_file(EXPENSES_FILE)
+    
+    # Helper function to parse date string to datetime
+    def parse_date(date_str):
+        if not date_str:
+            return None
+        try:
+            return datetime.strptime(date_str, '%Y-%m-%d')
+        except (ValueError, TypeError):
+            return None
+    
+    # Helper to get month key (YYYY-MM)
+    def get_month_key(date_str):
+        d = parse_date(date_str)
+        return d.strftime('%Y-%m') if d else None
+    
+    # Helper to get year key (YYYY)
+    def get_year_key(date_str):
+        d = parse_date(date_str)
+        return d.strftime('%Y') if d else None
+    
+    # Helper to get week key (YYYY-WXX)
+    def get_week_key(date_str):
+        d = parse_date(date_str)
+        if d:
+            year, week, _ = d.isocalendar()
+            return f"{year}-W{week:02d}"
+        return None
+    
+    # Basic totals
+    total_income = sum(float(item.get('amount', 0) or 0) for item in income_data)
+    total_expenses = sum(float(item.get('amount', 0) or 0) for item in expenses_data)
+    net_balance = total_income - total_expenses
+    
+    # Transaction counts
+    income_count = len(income_data)
+    expense_count = len(expenses_data)
+    total_transactions = income_count + expense_count
+    
+    # Average amounts
+    avg_income = total_income / income_count if income_count > 0 else 0
+    avg_expense = total_expenses / expense_count if expense_count > 0 else 0
+    
+    # Income by type/category
+    income_by_type = defaultdict(float)
+    income_count_by_type = defaultdict(int)
+    for item in income_data:
+        type_name = item.get('type', 'Uncategorized') or 'Uncategorized'
+        income_by_type[type_name] += float(item.get('amount', 0) or 0)
+        income_count_by_type[type_name] += 1
+    
+    # Expenses by type/category
+    expense_by_type = defaultdict(float)
+    expense_count_by_type = defaultdict(int)
+    for item in expenses_data:
+        type_name = item.get('type', 'Uncategorized') or 'Uncategorized'
+        expense_by_type[type_name] += float(item.get('amount', 0) or 0)
+        expense_count_by_type[type_name] += 1
+    
+    # Monthly breakdown
+    income_by_month = defaultdict(float)
+    expense_by_month = defaultdict(float)
+    for item in income_data:
+        month_key = get_month_key(item.get('date'))
+        if month_key:
+            income_by_month[month_key] += float(item.get('amount', 0) or 0)
+    for item in expenses_data:
+        month_key = get_month_key(item.get('date'))
+        if month_key:
+            expense_by_month[month_key] += float(item.get('amount', 0) or 0)
+    
+    # Get all months for trend data
+    all_months = sorted(set(list(income_by_month.keys()) + list(expense_by_month.keys())))
+    monthly_trend = []
+    for month in all_months:
+        monthly_trend.append({
+            'month': month,
+            'income': income_by_month.get(month, 0),
+            'expenses': expense_by_month.get(month, 0),
+            'net': income_by_month.get(month, 0) - expense_by_month.get(month, 0)
+        })
+    
+    # Yearly breakdown
+    income_by_year = defaultdict(float)
+    expense_by_year = defaultdict(float)
+    for item in income_data:
+        year_key = get_year_key(item.get('date'))
+        if year_key:
+            income_by_year[year_key] += float(item.get('amount', 0) or 0)
+    for item in expenses_data:
+        year_key = get_year_key(item.get('date'))
+        if year_key:
+            expense_by_year[year_key] += float(item.get('amount', 0) or 0)
+    
+    all_years = sorted(set(list(income_by_year.keys()) + list(expense_by_year.keys())))
+    yearly_trend = []
+    for year in all_years:
+        yearly_trend.append({
+            'year': year,
+            'income': income_by_year.get(year, 0),
+            'expenses': expense_by_year.get(year, 0),
+            'net': income_by_year.get(year, 0) - expense_by_year.get(year, 0)
+        })
+    
+    # Weekly breakdown (last 12 weeks)
+    income_by_week = defaultdict(float)
+    expense_by_week = defaultdict(float)
+    for item in income_data:
+        week_key = get_week_key(item.get('date'))
+        if week_key:
+            income_by_week[week_key] += float(item.get('amount', 0) or 0)
+    for item in expenses_data:
+        week_key = get_week_key(item.get('date'))
+        if week_key:
+            expense_by_week[week_key] += float(item.get('amount', 0) or 0)
+    
+    all_weeks = sorted(set(list(income_by_week.keys()) + list(expense_by_week.keys())))[-STATS_RECENT_WEEKS:]
+    weekly_trend = []
+    for week in all_weeks:
+        weekly_trend.append({
+            'week': week,
+            'income': income_by_week.get(week, 0),
+            'expenses': expense_by_week.get(week, 0),
+            'net': income_by_week.get(week, 0) - expense_by_week.get(week, 0)
+        })
+    
+    # Top income sources (by total amount)
+    income_by_source = defaultdict(float)
+    for item in income_data:
+        source = item.get('source', 'Unknown') or 'Unknown'
+        income_by_source[source] += float(item.get('amount', 0) or 0)
+    top_income_sources = sorted(income_by_source.items(), key=lambda x: x[1], reverse=True)[:STATS_TOP_ITEMS_LIMIT]
+    
+    # Top expense purposes (by total amount)
+    expense_by_purpose = defaultdict(float)
+    for item in expenses_data:
+        purpose = item.get('purpose', 'Unknown') or 'Unknown'
+        expense_by_purpose[purpose] += float(item.get('amount', 0) or 0)
+    top_expense_purposes = sorted(expense_by_purpose.items(), key=lambda x: x[1], reverse=True)[:STATS_TOP_ITEMS_LIMIT]
+    
+    # Highest/lowest transactions
+    all_income_amounts = [float(item.get('amount', 0) or 0) for item in income_data]
+    all_expense_amounts = [float(item.get('amount', 0) or 0) for item in expenses_data]
+    
+    highest_income = max(all_income_amounts) if all_income_amounts else 0
+    lowest_income = min(all_income_amounts) if all_income_amounts else 0
+    highest_expense = max(all_expense_amounts) if all_expense_amounts else 0
+    lowest_expense = min(all_expense_amounts) if all_expense_amounts else 0
+    
+    # Find actual items for highest/lowest
+    highest_income_item = next((item for item in income_data if float(item.get('amount', 0) or 0) == highest_income), None) if highest_income else None
+    highest_expense_item = next((item for item in expenses_data if float(item.get('amount', 0) or 0) == highest_expense), None) if highest_expense else None
+    
+    # Client/Person analysis
+    income_by_client = defaultdict(float)
+    for item in income_data:
+        clients = item.get('clients', []) or []
+        if isinstance(clients, list):
+            for client in clients:
+                if client:
+                    income_by_client[client] += float(item.get('amount', 0) or 0)
+    top_clients = sorted(income_by_client.items(), key=lambda x: x[1], reverse=True)[:STATS_TOP_ITEMS_LIMIT]
+    
+    expense_by_person = defaultdict(float)
+    for item in expenses_data:
+        persons = item.get('persons', []) or []
+        if isinstance(persons, list):
+            for person in persons:
+                if person:
+                    expense_by_person[person] += float(item.get('amount', 0) or 0)
+    top_expense_persons = sorted(expense_by_person.items(), key=lambda x: x[1], reverse=True)[:STATS_TOP_ITEMS_LIMIT]
+    
+    # Receipt statistics
+    total_receipts = sum(len(item.get('receipts', []) or []) for item in expenses_data)
+    expenses_with_receipts = sum(1 for item in expenses_data if item.get('receipts') and len(item.get('receipts', [])) > 0)
+    
+    # Date range statistics
+    all_dates = []
+    for item in income_data + expenses_data:
+        d = parse_date(item.get('date'))
+        if d:
+            all_dates.append(d)
+    
+    date_range = {
+        'earliest': min(all_dates).strftime('%Y-%m-%d') if all_dates else None,
+        'latest': max(all_dates).strftime('%Y-%m-%d') if all_dates else None,
+        'span_days': (max(all_dates) - min(all_dates)).days if len(all_dates) >= 2 else 0
+    }
+    
+    # Daily averages (based on date range)
+    days_span = date_range['span_days'] or 1
+    daily_avg_income = total_income / days_span if days_span > 0 else 0
+    daily_avg_expense = total_expenses / days_span if days_span > 0 else 0
+    
+    # This month's statistics
+    today = datetime.now()
+    current_month_key = today.strftime('%Y-%m')
+    this_month_income = income_by_month.get(current_month_key, 0)
+    this_month_expenses = expense_by_month.get(current_month_key, 0)
+    
+    # Last month's statistics
+    last_month = today.replace(day=1) - timedelta(days=1)
+    last_month_key = last_month.strftime('%Y-%m')
+    last_month_income = income_by_month.get(last_month_key, 0)
+    last_month_expenses = expense_by_month.get(last_month_key, 0)
+    
+    # This year's statistics
+    current_year_key = today.strftime('%Y')
+    this_year_income = income_by_year.get(current_year_key, 0)
+    this_year_expenses = expense_by_year.get(current_year_key, 0)
+    
+    # Savings rate
+    savings_rate = ((total_income - total_expenses) / total_income * 100) if total_income > 0 else 0
+    
+    # Monthly average
+    num_months = len(all_months) or 1
+    monthly_avg_income = total_income / num_months
+    monthly_avg_expense = total_expenses / num_months
+    
+    return jsonify({
+        # Overview
+        'overview': {
+            'total_income': total_income,
+            'total_expenses': total_expenses,
+            'net_balance': net_balance,
+            'savings_rate': round(savings_rate, 2),
+            'income_count': income_count,
+            'expense_count': expense_count,
+            'total_transactions': total_transactions,
+            'total_receipts': total_receipts,
+            'expenses_with_receipts': expenses_with_receipts
+        },
+        
+        # Averages
+        'averages': {
+            'avg_income': round(avg_income, 2),
+            'avg_expense': round(avg_expense, 2),
+            'daily_avg_income': round(daily_avg_income, 2),
+            'daily_avg_expense': round(daily_avg_expense, 2),
+            'monthly_avg_income': round(monthly_avg_income, 2),
+            'monthly_avg_expense': round(monthly_avg_expense, 2)
+        },
+        
+        # Extremes
+        'extremes': {
+            'highest_income': highest_income,
+            'lowest_income': lowest_income,
+            'highest_expense': highest_expense,
+            'lowest_expense': lowest_expense,
+            'highest_income_item': highest_income_item,
+            'highest_expense_item': highest_expense_item
+        },
+        
+        # By category/type
+        'by_category': {
+            'income_by_type': dict(income_by_type),
+            'expense_by_type': dict(expense_by_type),
+            'income_count_by_type': dict(income_count_by_type),
+            'expense_count_by_type': dict(expense_count_by_type)
+        },
+        
+        # Top items
+        'top_items': {
+            'income_sources': [{'name': k, 'amount': v} for k, v in top_income_sources],
+            'expense_purposes': [{'name': k, 'amount': v} for k, v in top_expense_purposes],
+            'clients': [{'name': k, 'amount': v} for k, v in top_clients],
+            'expense_persons': [{'name': k, 'amount': v} for k, v in top_expense_persons]
+        },
+        
+        # Time-based trends
+        'trends': {
+            'monthly': monthly_trend,
+            'yearly': yearly_trend,
+            'weekly': weekly_trend
+        },
+        
+        # Current period stats
+        'current_period': {
+            'this_month_income': this_month_income,
+            'this_month_expenses': this_month_expenses,
+            'this_month_net': this_month_income - this_month_expenses,
+            'last_month_income': last_month_income,
+            'last_month_expenses': last_month_expenses,
+            'last_month_net': last_month_income - last_month_expenses,
+            'this_year_income': this_year_income,
+            'this_year_expenses': this_year_expenses,
+            'this_year_net': this_year_income - this_year_expenses
+        },
+        
+        # Date range
+        'date_range': date_range
+    })
+
+
 @app.route('/api/push', methods=['POST'])
 def push_to_github():
     """
